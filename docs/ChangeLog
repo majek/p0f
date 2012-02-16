@@ -1,0 +1,69 @@
+Version 3.03b:
+--------------
+
+Bug fixes:
+
+  - Potential NULL ptr in p0f-client on some 64-bit systems.
+
+Version 3.02b:
+--------------
+
+Bug fixes:
+
+  - Cygwin compile issue fixed.
+
+Improvements:
+
+  - New signatures.
+
+Version 3.01b (2012-01-17):
+---------------------------
+
+Bug fixes:
+
+  - 'Date' comparisons for server sigs now work as expected.
+
+  - Bad TS reading now allowed on initial SYN (improves uptime detection).
+
+Improvements:
+
+  - New signatures.
+
+  - Solaris support (in theory).
+
+Version 3.00b (2012-01-17):
+---------------------------
+
+Bug fixes:
+
+  - Alignment-related SIGBUS non-x86 fixed.
+
+  - Cache expiration algorithm now works as expected.
+
+  - p0f -L no longer leads to NULL ptr when no interfaces visible.
+
+  - Greppable output format no longer mixes up cli and srv fields.
+
+  - Added '|' to banned characters in reported header values.
+
+Improvements:
+
+  - Multiple new HTTP and TCP signatures.
+
+  - Improved MSS/MTU matching to account for peer MTU.
+
+  - New HTTP fingerprinting logic with optional headers (? prefix).
+
+  - Memory leak detection added (but nothing found).
+
+  - API now indicates the value of 'generic' / 'fuzzy' fields and several
+    other parameters.
+
+  - General style improvements.
+
+  - Delay added to p0f-sendsyn to aid with packet ordering.
+
+Version 3.00-rc0 (2012-01-10):
+------------------------------
+
+  - Initial public release, complete rewrite.
