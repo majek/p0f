@@ -36,6 +36,7 @@
 #include "fp_tcp.h"
 #include "fp_mtu.h"
 #include "fp_http.h"
+#include "fp_ssl.h"
 
 u64 packet_cnt;                         /* Total number of packets processed  */
 
@@ -1368,6 +1369,7 @@ static void flow_dispatch(struct packet_data* pk) {
       if (!pk->pay_len) return;
 
       need_more |= process_http(to_srv, f);
+      need_more |= process_ssl(to_srv, f);
 
       if (!need_more) {
 

@@ -1,0 +1,71 @@
+
+
+Not many people realize that the unencrypted SSL handshake
+(ClientHello message) reveals a lot of details about the client.
+
+It should be possible to at least fingerprint underlying SSL
+library. With a bit of luck it might be possible to match some details
+about particular application (like browser).
+
+Figuring out exact fingerprint structure is still work in progress.
+
+
+Fingerprinting SSL is not a new idea, initial work was done in mid
+2009 by Ivan Ristić:
+
+ * https://www.ssllabs.com/projects/client-fingerprinting/
+
+He was able to collect few dozen initeresting signatures:
+
+ * http://blog.ivanristic.com/2009/07/examples-of-the-information-collected-from-ssl-handshakes.html
+
+Though, in his works he seem to have ignored the SSL extensions field,
+which might be very important factor in generating reliable
+fingerprints. Expecially extensions ordering may have high value,
+similarly to TCP options ordering for TCP/IP stack fingerprinting.
+
+
+SSL handshake (ClientHello message) contains following fields:
+
+ * Handshake version - browsers usually use version 3, Ivan Ristić
+   showed that crawlers still use 2. Currently only SSL 3 data is
+   supported.
+
+ * Requested protocol version - most likely 3.1. Less likely values
+   are 3.0 and 3.2.
+
+ * gmt_unix_time - which can be used to get current time on the client
+   machine. Adding this information to knowledge gathered from the TCP
+   timestamp could become a very valuable factor in detecting NATs.
+
+ * 28 random bytes - ignored by now. Detailed analysis of PRNG might
+   reveal something intersting, similairly to:
+     http://lcamtuf.coredump.cx/oldtcp/tcpseq.html
+
+ * session_id - a client may choose to resume prevoius SSL session.
+   This field can be used to match this browser session with previous
+   activities, which has an impact on user privacy, but it is probably
+   too high level for p0f.
+
+ * cipher_suites - a list of supported encryption algorithms. Both
+   specific algorithms and their order seem to be application
+   specific.
+
+ * compression_methods - a list of supported compression
+   methods. Currently only Chorme supports compression.
+
+ * extensions - a list of extensions. Second major source of data,
+   after cipher_suites. Seem to be very application specific.
+
+
+Similar frame is reported by the SSL server to the client, but it
+contains less information - single cipher_suite instead of a
+list. Also, the response is dependent on the request which makes it
+not a very good material for passive fingerprinting. On the other
+hand, some fields (like gmt_unix_time) may still be valuable.
+
+
+References:
+
+ * http://tools.ietf.org/html/rfc5246
+

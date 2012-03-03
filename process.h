@@ -195,6 +195,8 @@ struct packet_flow {
 
   struct http_sig http_tmp;             /* Temporary signature                */
 
+  s8  in_ssl;                           /* 0 = tbd, 1 = yes, -1 = no          */
+
 };
 
 extern u64 packet_cnt;
