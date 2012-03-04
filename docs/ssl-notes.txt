@@ -1,6 +1,6 @@
 
 
-Not many people realize that the unencrypted SSL handshake
+Not many people realise that the unencrypted SSL handshake
 (ClientHello message) reveals a lot of details about the client.
 
 It should be possible to at least fingerprint underlying SSL
@@ -15,13 +15,13 @@ Fingerprinting SSL is not a new idea, initial work was done in mid
 
  * https://www.ssllabs.com/projects/client-fingerprinting/
 
-He was able to collect few dozen initeresting signatures:
+He was able to collect few dozen interesting signatures:
 
  * http://blog.ivanristic.com/2009/07/examples-of-the-information-collected-from-ssl-handshakes.html
 
 Though, in his works he seem to have ignored the SSL extensions field,
 which might be very important factor in generating reliable
-fingerprints. Expecially extensions ordering may have high value,
+fingerprints. Especially extensions ordering may have high value,
 similarly to TCP options ordering for TCP/IP stack fingerprinting.
 
 
@@ -39,10 +39,10 @@ SSL handshake (ClientHello message) contains following fields:
    timestamp could become a very valuable factor in detecting NATs.
 
  * 28 random bytes - ignored by now. Detailed analysis of PRNG might
-   reveal something intersting, similairly to:
+   reveal something interesting, similarly to:
      http://lcamtuf.coredump.cx/oldtcp/tcpseq.html
 
- * session_id - a client may choose to resume prevoius SSL session.
+ * session_id - a client may choose to resume previous SSL session.
    This field can be used to match this browser session with previous
    activities, which has an impact on user privacy, but it is probably
    too high level for p0f.
@@ -52,7 +52,7 @@ SSL handshake (ClientHello message) contains following fields:
    specific.
 
  * compression_methods - a list of supported compression
-   methods. Currently only Chorme supports compression.
+   methods. Currently only Chrome supports compression.
 
  * extensions - a list of extensions. Second major source of data,
    after cipher_suites. Seem to be very application specific.
@@ -68,4 +68,4 @@ hand, some fields (like gmt_unix_time) may still be valuable.
 References:
 
  * http://tools.ietf.org/html/rfc5246
-
+ * http://www.iana.org/assignments/tls-extensiontype-values/tls-extensiontype-values.xml
