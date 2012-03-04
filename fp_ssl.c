@@ -34,6 +34,81 @@
 #include "fp_ssl.h"
 
 
+int fingerprint_ssl_v2(struct ssl_sig *sig, const u8 *pay, u32 pay_len) {
+
+  const u8 *pay_end = pay + pay_len;
+  const u8 *tmp_end;
+
+  if (pay + sizeof(struct ssl2_hdr) > pay_end) goto abort_message;
+
+  struct ssl2_hdr *hdr = (struct ssl2_hdr*)pay;
+  pay += sizeof(struct ssl2_hdr);
+
+
+  /* SSLv2 has version 0x0002 on the wire. */
+  if (hdr->ver_min == 2 && hdr->ver_maj == 0) {
+
+    sig->request_version = 0x0200;
+
+  } else {
+
+    sig->request_version = (hdr->ver_maj << 8) | hdr->ver_min;
+
+  }
+
+
+  u16 cipher_spec_len = ntohs(hdr->cipher_spec_length);
+
+  if (cipher_spec_len % 3) {
+
+    DEBUG("[#] SSLv2 cipher_spec_len=%u is not divisable by 3.\n",
+          cipher_spec_len);
+    return -1;
+
+  }
+
+  if (pay + cipher_spec_len > pay_end) goto abort_message;
+
+  sig->cipher_suites = (u32*)ck_alloc((cipher_spec_len / 3) * sizeof(u32));
+  sig->cipher_suites_len = 0;
+  tmp_end = pay + cipher_spec_len;
+
+  while (pay < tmp_end) {
+
+    sig->cipher_suites[sig->cipher_suites_len++] =
+      (pay[0] << 16) | (pay[1] << 8) | pay[2];
+    pay += 3;
+
+  }
+
+
+  u16 session_id_len = ntohs(hdr->session_id_length);
+  u16 challenge_len = ntohs(hdr->challenge_length);
+
+  if (pay + session_id_len + challenge_len > pay_end) goto stop;
+  pay += session_id_len + challenge_len;
+
+  if (pay != pay_end) {
+
+    DEBUG("[#] SSLv2 extra %u bytes remaining after client-hello message.\n",
+          pay_end - pay);
+
+  }
+
+
+stop:
+
+  return 1;
+
+
+abort_message:
+
+  ck_free(sig->cipher_suites);
+
+  return -1;
+
+}
+
 /* Unpack SSLv3 fragment to a signature. We expect to hear ClientHello
  message.  -1 on parsing error, 1 if signature was extracted. */
 
@@ -112,7 +187,7 @@ int fingerprint_ssl_v3(struct ssl_sig *sig, const u8 *fragment, u32 frag_len) {
 
   if (cipher_suites_len % 2) {
 
-    DEBUG("[.] SSL cipher_suites_len=%u is not even.\n", cipher_suites_len);
+    DEBUG("[#] SSL cipher_suites_len=%u is not even.\n", cipher_suites_len);
     goto abort_message;
 
   }
@@ -120,7 +195,7 @@ int fingerprint_ssl_v3(struct ssl_sig *sig, const u8 *fragment, u32 frag_len) {
   if (pay + cipher_suites_len > pay_end)
     goto abort_message;
 
-  sig->cipher_suites = (u16*)ck_alloc(cipher_suites_len);
+  sig->cipher_suites = (u32*)ck_alloc((cipher_suites_len / 2) * sizeof(u32));
   sig->cipher_suites_len = 0;
   tmp_end = pay + cipher_suites_len;
 
@@ -235,6 +310,10 @@ void print_ssl_sig(struct ssl_sig *sig) {
 
 u8 process_ssl(u8 to_srv, struct packet_flow *f) {
 
+  int success = 0;
+  struct ssl_sig sig;
+
+
   /* Already decided this flow? */
 
   if (f->in_ssl) return 0;
@@ -247,55 +326,82 @@ u8 process_ssl(u8 to_srv, struct packet_flow *f) {
 
   u8 can_get_more = (f->req_len < MAX_FLOW_DATA);
 
-  if (f->req_len < sizeof(struct ssl3_record_hdr)) return can_get_more;
 
-  struct ssl3_record_hdr *hdr = (struct ssl3_record_hdr*)f->request;
-  u16 fragment_len = ntohs(hdr->length);
+  /* SSLv3 record is 5 bytes, message is 4 + 38; SSLv2 CLIENT-HELLO is
+     11 bytes - we try to recognize protocol by looking at top 6
+     bytes. */
 
-  /* Currently available TLS versions: 3.0, 3.1, 3.2, 3.3. The rfc
-     disallows fragment to have more than 2^14 bytes. Also length less
-     than 4 bytes doesn't make much sense. */
+  if (f->req_len < 6) return can_get_more;
 
-  if (hdr->content_type != SSL3_REC_HANDSHAKE ||
-      hdr->ver_maj != 3 ||
-      hdr->ver_min > 3 || fragment_len > (1 << 14) || fragment_len < 4) {
+  struct ssl2_hdr *hdr2 = (struct ssl2_hdr*)f->request;
+  u16 msg_length = ntohs(hdr2->msg_length);
 
-    DEBUG("[#] Does not look like SSLv3\n");
+  struct ssl3_record_hdr *hdr3 = (struct ssl3_record_hdr*)f->request;
+  u16 fragment_len = ntohs(hdr3->length);
+
+
+  /* Does it look like top 5 bytes of SSLv2? Most significant bit must
+     be set, followed by 15 bits indicating record length, which must
+     be at least 9. */
+
+  if ((msg_length & 0x8000) &&
+      (msg_length & ~0x8000) >= sizeof(struct ssl2_hdr) - 2 &&
+      hdr2->msg_type == 1 &&
+      ((hdr2->ver_maj == 3 && hdr2->ver_min < 4) ||
+       (hdr2->ver_min == 2 && hdr2->ver_maj == 0))) {
+
+    /* Clear top bit. */
+    msg_length &= ~0x8000;
+
+    if (f->req_len < 2 + msg_length) return can_get_more;
+
+    memset(&sig, 0, sizeof(struct ssl_sig));
+    sig.record_version = 0x0200;
+
+    success = fingerprint_ssl_v2(&sig, f->request, msg_length + 2);
+
+  }
+
+
+  /* Top 5 bytes of SSLv3/TLS header? Currently available TLS
+     versions: 3.0 - 3.3. The rfc disallows fragment to have more than
+     2^14 bytes. Also length less than 4 bytes doesn't make much
+     sense. Additionally let's peek the meesage type. */
+
+  else if (hdr3->content_type == SSL3_REC_HANDSHAKE &&
+           hdr3->ver_maj == 3 && hdr3->ver_min < 4 &&
+           fragment_len > 3 && fragment_len < (1 << 14) &&
+           f->request[5] == SSL3_MSG_CLIENT_HELLO) {
+
+    if (f->req_len < sizeof(struct ssl3_record_hdr) + fragment_len)
+      return can_get_more;
+
+    memset(&sig, 0, sizeof(struct ssl_sig));
+    sig.record_version = (hdr3->ver_maj << 8) | hdr3->ver_min;
+    sig.local_time = f->client->last_seen;
+
+    u8 *fragment = f->request + sizeof(struct ssl3_record_hdr);
+
+    success = fingerprint_ssl_v3(&sig, fragment, fragment_len);
+
+  }
+
+  if (success != 1) {
+
+    DEBUG("[#] Does not look like SSLv2 nor SSLv3.\n");
 
     f->in_ssl = -1;
     return 0;
 
   }
 
-  if (f->req_len < sizeof(struct ssl3_record_hdr) + fragment_len)
-    return can_get_more;
+  print_ssl_sig(&sig);
 
+  ck_free(sig.cipher_suites);
+  ck_free(sig.compression_methods);
+  ck_free(sig.extensions);
 
-  struct ssl_sig *sig = (struct ssl_sig*)ck_alloc(sizeof(struct ssl_sig));
-
-  sig->record_version = (hdr->ver_maj << 8) | hdr->ver_min;
-  sig->local_time = f->client->last_seen;
-
-  u8 *fragment = f->request + sizeof(struct ssl3_record_hdr);
-
-
-  if (fingerprint_ssl_v3(sig, fragment, fragment_len) == 1) {
-
-    print_ssl_sig(sig);
-
-    f->in_ssl = 1;
-
-    ck_free(sig->cipher_suites);
-    ck_free(sig->compression_methods);
-    ck_free(sig->extensions);
-
-  }
-
-  ck_free(sig);
-
-  f->in_ssl = 0;
+  f->in_ssl = 1;
   return 0;
 
 }
-
-

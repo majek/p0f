@@ -27,6 +27,24 @@ struct ssl3_record_hdr {
 
 #define SSL3_MSG_CLIENT_HELLO 0x01
 
+#define SSL3_MSG_CLIENT_HELLO_MIN_SZ 38
+
+
+struct ssl2_hdr {
+
+  u16 msg_length;
+  u8 msg_type;
+  u8 ver_maj;
+  u8 ver_min;
+
+  u16 cipher_spec_length;
+  u16 session_id_length;
+  u16 challenge_length;
+
+} __attribute__((packed));
+
+#define SSL2_CLIENT_HELLO_MIN_SZ 11
+
 struct ssl_message_hdr {
 
   u8 message_type;
@@ -43,7 +61,7 @@ struct ssl_sig {
   u32 remote_time;              /* ClientHello message gmt_unix_time field */
   u32 local_time;               /* Receive time. */
 
-  u16 *cipher_suites;
+  u32 *cipher_suites;
   u32 cipher_suites_len;
 
   u8 *compression_methods;
