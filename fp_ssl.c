@@ -34,7 +34,6 @@
 #include "fp_ssl.h"
 
 
-int fingerprint_ssl_v2(struct ssl_sig *sig, const u8 *pay, u32 pay_len) {
 
 static int fingerprint_ssl_v2(struct ssl_sig *sig, const u8 *pay, u32 pay_len) {
 
@@ -289,7 +288,7 @@ void print_ssl_sig(struct ssl_sig *sig) {
 
 static u8* dump_sig(struct ssl_sig *sig) {
 
-  int i, c = 0;
+  int i, had_prev;
 
   static u8* ret;
   u32 rlen = 0;
@@ -317,17 +316,22 @@ static u8* dump_sig(struct ssl_sig *sig) {
   }
 
   RETF(":");
+  had_prev = 0;
 
   if (sig->record_version == 0x0200) {
-    RETF("%sv2", (!c++ ? "" : ","));
+    RETF("%sv2", had_prev ? "," : "");
+    had_prev = 1;
   } else {
-    if (sig->record_version != sig->request_version)
-      RETF("%sver", (!c++ ? "" : ","));
+    if (sig->record_version != sig->request_version) {
+      RETF("%sver", had_prev ? "," : "");
+      had_prev = 1;
+    }
   }
 
   for (i=0; i < sig->compression_methods_len; i++) {
     if (sig->compression_methods[i] == 1) {
-      RETF("%scompr", (!c++ ? "" : ","));
+      RETF("%scompr", had_prev ? "," : "");
+      had_prev = 1;
       break;
     }
   }
