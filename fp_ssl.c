@@ -284,7 +284,7 @@ abort_message:
 
 void print_ssl_sig(struct ssl_sig *sig) {
 
-  DEBUG("[#] SSL %04x;%04x;", sig->record_version, sig->request_version);
+  DEBUG("[#] SSL %i.%i;", sig->request_version >> 8, sig->request_version & 0xFF);
   int i;
 
   for (i=0; i < sig->cipher_suites_len; i++)
@@ -292,15 +292,31 @@ void print_ssl_sig(struct ssl_sig *sig) {
 
   DEBUG(";");
 
-  for (i=0; i < sig->compression_methods_len; i++)
-    DEBUG("%s%x", (!i ? "" : ","), sig->compression_methods[i]);
+  for (i=0; i < sig->extensions_len; i++) {
+    u32 ext = sig->extensions[i];
+    DEBUG("%s%s%x", (!i ? "" : ","),
+          (ext == 0 || ext == 5 ? "?" : ""),
+          ext);
+  }
 
   DEBUG(";");
 
-  for (i=0; i < sig->extensions_len; i++)
-    DEBUG("%s%x", (!i ? "" : ","), sig->extensions[i]);
+  int j=0;
+  if (sig->record_version == 0x0200) {
+    DEBUG("%sv2", (!j++ ? "" : ","));
+  } else {
+    if (sig->record_version != sig->request_version)
+      DEBUG("%sver", (!j++ ? "" : ","));
+  }
 
-  DEBUG(";%u\n", sig->local_time - sig->remote_time);
+  for (i=0; i < sig->compression_methods_len; i++) {
+    if (sig->compression_methods[i] == 1) {
+      DEBUG("%scompr", (!j++ ? "" : ","));
+      break;
+    }
+  }
+
+  DEBUG("\n");
 
 }
 
