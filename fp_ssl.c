@@ -36,6 +36,8 @@
 
 int fingerprint_ssl_v2(struct ssl_sig *sig, const u8 *pay, u32 pay_len) {
 
+static int fingerprint_ssl_v2(struct ssl_sig *sig, const u8 *pay, u32 pay_len) {
+
   const u8 *pay_end = pay + pay_len;
   const u8 *tmp_end;
 
@@ -112,7 +114,7 @@ abort_message:
 /* Unpack SSLv3 fragment to a signature. We expect to hear ClientHello
  message.  -1 on parsing error, 1 if signature was extracted. */
 
-int fingerprint_ssl_v3(struct ssl_sig *sig, const u8 *fragment, u32 frag_len) {
+static int fingerprint_ssl_v3(struct ssl_sig *sig, const u8 *fragment, u32 frag_len) {
 
   const u8 *record = fragment;
   const u8 *frag_end = fragment + frag_len;
@@ -283,40 +285,63 @@ abort_message:
 
 
 void print_ssl_sig(struct ssl_sig *sig) {
+}
 
-  DEBUG("[#] SSL %i.%i;", sig->request_version >> 8, sig->request_version & 0xFF);
-  int i;
+static u8* dump_sig(struct ssl_sig *sig) {
+
+  int i, c = 0;
+
+  static u8* ret;
+  u32 rlen = 0;
+
+#define RETF(_par...) do { \
+    s32 _len = snprintf(NULL, 0, _par); \
+    if (_len < 0) FATAL("Whoa, snprintf() fails?!"); \
+    ret = DFL_ck_realloc_kb(ret, rlen + _len + 1); \
+    snprintf((char*)ret + rlen, _len + 1, _par); \
+    rlen += _len; \
+  } while (0)
+
+  RETF("%i.%i:", sig->request_version >> 8, sig->request_version & 0xFF);
 
   for (i=0; i < sig->cipher_suites_len; i++)
-    DEBUG("%s%x", (!i ? "" : ","), sig->cipher_suites[i]);
+    RETF("%s%x", (!i ? "" : ","), sig->cipher_suites[i]);
 
-  DEBUG(";");
+  RETF(":");
 
   for (i=0; i < sig->extensions_len; i++) {
     u32 ext = sig->extensions[i];
-    DEBUG("%s%s%x", (!i ? "" : ","),
+    RETF("%s%s%x", (!i ? "" : ","),
           (ext == 0 || ext == 5 ? "?" : ""),
           ext);
   }
 
-  DEBUG(";");
+  RETF(":");
 
-  int j=0;
   if (sig->record_version == 0x0200) {
-    DEBUG("%sv2", (!j++ ? "" : ","));
+    RETF("%sv2", (!c++ ? "" : ","));
   } else {
     if (sig->record_version != sig->request_version)
-      DEBUG("%sver", (!j++ ? "" : ","));
+      RETF("%sver", (!c++ ? "" : ","));
   }
 
   for (i=0; i < sig->compression_methods_len; i++) {
     if (sig->compression_methods[i] == 1) {
-      DEBUG("%scompr", (!j++ ? "" : ","));
+      RETF("%scompr", (!c++ ? "" : ","));
       break;
     }
   }
 
-  DEBUG("\n");
+  return ret;
+
+}
+
+
+static void fingerprint_ssl(u8 to_srv, struct packet_flow* f, struct ssl_sig *sig) {
+
+  start_observation("ssl request", 1, to_srv, f);
+
+  add_observation_field("raw_sig", dump_sig(sig));
 
 }
 
@@ -411,13 +436,24 @@ u8 process_ssl(u8 to_srv, struct packet_flow *f) {
 
   }
 
+
+  long a = f->client->last_seen;
+  struct tm *tm = gmtime(&a);
+  char buf[512];
+
+  strftime(buf, sizeof(buf), "%d/%b/%Y:%T %z", tm);
+
+  DEBUG("%s - - [%s] ", addr_to_str(f->client->addr, f->client->ip_ver), buf);
   print_ssl_sig(&sig);
+
+  f->in_ssl = 1;
+
+  fingerprint_ssl(to_srv, f, &sig);
 
   ck_free(sig.cipher_suites);
   ck_free(sig.compression_methods);
   ck_free(sig.extensions);
 
-  f->in_ssl = 1;
   return 0;
 
 }
