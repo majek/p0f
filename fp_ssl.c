@@ -69,7 +69,7 @@ int fingerprint_ssl_v2(struct ssl_sig *sig, const u8 *pay, u32 pay_len) {
 
   if (pay + cipher_spec_len > pay_end) goto abort_message;
 
-  sig->cipher_suites = (u32*)ck_alloc((cipher_spec_len / 3) * sizeof(u32));
+  sig->cipher_suites = ck_alloc((cipher_spec_len / 3) * sizeof(u32));
   sig->cipher_suites_len = 0;
   tmp_end = pay + cipher_spec_len;
 
@@ -195,7 +195,7 @@ int fingerprint_ssl_v3(struct ssl_sig *sig, const u8 *fragment, u32 frag_len) {
   if (pay + cipher_suites_len > pay_end)
     goto abort_message;
 
-  sig->cipher_suites = (u32*)ck_alloc((cipher_suites_len / 2) * sizeof(u32));
+  sig->cipher_suites = ck_alloc((cipher_suites_len / 2) * sizeof(u32));
   sig->cipher_suites_len = 0;
   tmp_end = pay + cipher_suites_len;
 
@@ -213,7 +213,7 @@ int fingerprint_ssl_v3(struct ssl_sig *sig, const u8 *fragment, u32 frag_len) {
 
   if (pay + compression_methods_len > pay_end ) goto stop;
 
-  sig->compression_methods = (u8*)ck_alloc(compression_methods_len);
+  sig->compression_methods = ck_alloc(compression_methods_len);
   sig->compression_methods_len = 0;
   tmp_end = pay + compression_methods_len;
 
@@ -231,7 +231,7 @@ int fingerprint_ssl_v3(struct ssl_sig *sig, const u8 *fragment, u32 frag_len) {
 
   if (pay + extensions_len > pay_end) goto stop;
 
-  sig->extensions = (u16*)ck_alloc(extensions_len);
+  sig->extensions = ck_alloc(extensions_len);
   sig->extensions_len = 0;
   tmp_end = pay + extensions_len;
 
