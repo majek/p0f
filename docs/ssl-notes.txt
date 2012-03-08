@@ -28,8 +28,7 @@ similarly to TCP options ordering for TCP/IP stack fingerprinting.
 SSL handshake (ClientHello message) contains following fields:
 
  * Handshake version - browsers usually use version 3, Ivan Ristić
-   showed that crawlers still use 2. Currently only SSL 3 data is
-   supported.
+   showed that web crawlers (including wget) still use 2.
 
  * Requested protocol version - most likely 3.1. Less likely values
    are 3.0 and 3.2.
@@ -52,10 +51,10 @@ SSL handshake (ClientHello message) contains following fields:
    specific.
 
  * compression_methods - a list of supported compression
-   methods. Currently only Chrome supports compression.
+   methods.
 
- * extensions - a list of extensions. Second major source of data,
-   after cipher_suites. Seem to be very application specific.
+ * extensions - a list of extensions. Second, after cipher_suites,
+   major source of data.
 
 
 Similar frame is reported by the SSL server to the client, but it

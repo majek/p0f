@@ -45,7 +45,6 @@ static int fingerprint_ssl_v2(struct ssl_sig *sig, const u8 *pay, u32 pay_len) {
   struct ssl2_hdr *hdr = (struct ssl2_hdr*)pay;
   pay += sizeof(struct ssl2_hdr);
 
-
   /* SSLv2 has version 0x0002 on the wire. */
   if (hdr->ver_min == 2 && hdr->ver_maj == 0) {
 
@@ -113,8 +112,10 @@ abort_message:
 /* Unpack SSLv3 fragment to a signature. We expect to hear ClientHello
  message.  -1 on parsing error, 1 if signature was extracted. */
 
-static int fingerprint_ssl_v3(struct ssl_sig *sig, const u8 *fragment, u32 frag_len) {
+static int fingerprint_ssl_v3(struct ssl_sig *sig, const u8 *fragment,
+                              u32 frag_len, u32 local_time) {
 
+  int i;
   const u8 *record = fragment;
   const u8 *frag_end = fragment + frag_len;
 
@@ -168,13 +169,49 @@ static int fingerprint_ssl_v3(struct ssl_sig *sig, const u8 *fragment, u32 frag_
 
   sig->request_version = (pay[0] << 8) | pay[1];
 
+  if (sig->request_version != sig->record_version) {
+    sig->flags |= SSL_FLAG_VER;
+  }
+
   sig->remote_time = ntohl(*((u32*)&pay[2]));
+  sig->local_time  = local_time;
+  s32 delta = abs((s32)(sig->local_time - sig->remote_time));
+
+  if (sig->remote_time == 0x4d786109) {
+
+    sig->flags |= SSL_FLAG_KTIME;
+
+  } else if (remote_time < 1*365*24*60*60) {
+
+    sig->flags |= SSL_FLAG_STIME;
+
+  } else if (delta > 5*365*24*60*60) {
+
+    /* More than 5 years difference? */
+    sig->flags |= SSL_FLAG_TIME;
+
+    DEBUG("[#] SSL timer looks wrong: delta=%i remote_time=%08x\n",
+          delta, sig->remote_time);
+
+  }
 
 
-  /* Skip random, ignore session_id */
+  pay += 6;
 
-  u8 session_id_len = pay[34];
-  pay += 35;
+
+  /* Random */
+  u16 *random = (u16*)pay;
+  pay += 28;
+
+  for (i=0; i<14; i++) {
+    if (random[i] == 0x0000 || random[i] == 0xffff) {
+      sig->flags |= SSL_FLAG_RAND;
+    }
+  }
+
+  /* Skip session_id */
+  u8 session_id_len = pay[0];
+  pay += 1;
 
   if (pay + session_id_len + 2 > pay_end) goto abort_message;
 
@@ -221,6 +258,10 @@ static int fingerprint_ssl_v3(struct ssl_sig *sig, const u8 *fragment, u32 frag_
   while (pay < tmp_end) {
 
     sig->compression_methods[sig->compression_methods_len++] = pay[0];
+    if (pay[0] == 1) {
+      sig->flags |= SSL_FLAG_COMPR;
+    }
+
     pay += 1;
 
   }
@@ -236,12 +277,21 @@ static int fingerprint_ssl_v3(struct ssl_sig *sig, const u8 *fragment, u32 frag_
   sig->extensions_len = 0;
   tmp_end = pay + extensions_len;
 
+  DEBUG("[#] SSL extensions=");
+
   while (pay < tmp_end) {
 
     u16 ext_type = (pay[0] << 8) | pay[1];
     u16 ext_len = (pay[2] << 8) | pay[3];
     const u8 *extension = &pay[4];
-    pay += 4 + ext_len;
+    pay += 4;
+
+    DEBUG("%s%x/", (!sig->extensions_len ? "" : ","), ext_type);
+    for (i=0; i<ext_len; i++) {
+      DEBUG("%02x", pay[i]);
+    }
+
+    pay += ext_len;
 
     if (pay > tmp_end) goto stop;
 
@@ -250,6 +300,8 @@ static int fingerprint_ssl_v3(struct ssl_sig *sig, const u8 *fragment, u32 frag_
     /* Ignore the actual value of the extenstion. */
     extension = extension;
   }
+
+  DEBUG("\n");
 
   if (pay != pay_end) {
 
@@ -318,23 +370,41 @@ static u8* dump_sig(struct ssl_sig *sig) {
   RETF(":");
   had_prev = 0;
 
-  if (sig->record_version == 0x0200) {
-    RETF("%sv2", had_prev ? "," : "");
+  if (sig->flags & SSL_FLAG_COMPR) {
+    RETF("%scompr", had_prev ? "," : "");
     had_prev = 1;
-  } else {
-    if (sig->record_version != sig->request_version) {
-      RETF("%sver", had_prev ? "," : "");
-      had_prev = 1;
-    }
   }
 
-  for (i=0; i < sig->compression_methods_len; i++) {
-    if (sig->compression_methods[i] == 1) {
-      RETF("%scompr", had_prev ? "," : "");
-      had_prev = 1;
-      break;
-    }
+  if (sig->flags & SSL_FLAG_V2) {
+    RETF("%sv2", had_prev ? "," : "");
+    had_prev = 1;
   }
+
+  if (sig->flags & SSL_FLAG_VER) {
+    RETF("%sver", had_prev ? "," : "");
+    had_prev = 1;
+  }
+
+  if (sig->flags & SSL_FLAG_RAND) {
+    RETF("%srand", had_prev ? "," : "");
+    had_prev = 1;
+  }
+
+  if (sig->flags & SSL_FLAG_KTIME) {
+    RETF("%sktime", had_prev ? "," : "");
+    had_prev = 1;
+  }
+
+  if (sig->flags & SSL_FLAG_TIME) {
+    RETF("%stime", had_prev ? "," : "");
+    had_prev = 1;
+  }
+
+  if (sig->flags & SSL_FLAG_STIME) {
+    RETF("%sstime", had_prev ? "," : "");
+    had_prev = 1;
+  }
+
 
   return ret;
 
@@ -402,6 +472,7 @@ u8 process_ssl(u8 to_srv, struct packet_flow *f) {
 
     memset(&sig, 0, sizeof(struct ssl_sig));
     sig.record_version = 0x0200;
+    sig.flags |= SSL_FLAG_V2;
 
     success = fingerprint_ssl_v2(&sig, f->request, msg_length + 2);
 
@@ -423,11 +494,11 @@ u8 process_ssl(u8 to_srv, struct packet_flow *f) {
 
     memset(&sig, 0, sizeof(struct ssl_sig));
     sig.record_version = (hdr3->ver_maj << 8) | hdr3->ver_min;
-    sig.local_time = f->client->last_seen;
 
     u8 *fragment = f->request + sizeof(struct ssl3_record_hdr);
 
-    success = fingerprint_ssl_v3(&sig, fragment, fragment_len);
+    success = fingerprint_ssl_v3(&sig, fragment, fragment_len,
+                                 f->client->last_seen);
 
   }
 
