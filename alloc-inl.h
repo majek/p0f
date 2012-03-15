@@ -289,7 +289,7 @@ struct TRK_obj {
 extern struct TRK_obj* TRK[ALLOC_BUCKETS];
 extern u32 TRK_cnt[ALLOC_BUCKETS];
 
-#define TRKH(_ptr) (((((u32)(_ptr)) >> 16) ^ ((u32)(_ptr))) % ALLOC_BUCKETS)
+#define TRKH(_ptr) (u32)(((((unsigned long)(_ptr)) >> 16) ^ ((unsigned long)(_ptr))) % ALLOC_BUCKETS)
 
 /* Adds a new entry to the list of allocated objects. */
 

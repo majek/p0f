@@ -1,3 +1,4 @@
+/* -*-mode:c; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
 /*
    p0f - p0f.fp file parser
    ------------------------
@@ -29,6 +30,7 @@
 #include "fp_tcp.h"
 #include "fp_mtu.h"
 #include "fp_http.h"
+#include "fp_ssl.h"
 #include "readfp.h"
 
 static u32 sig_cnt;                     /* Total number of p0f.fp sigs        */
@@ -270,6 +272,10 @@ static void config_parse_line(u8* line) {
 
       mod_type = CF_MOD_HTTP;
 
+    } else if (!strcmp((char*)line, "ssl")) {
+
+      mod_type = CF_MOD_SSL;
+
     } else {
 
       FATAL("Unrecognized fingerprinting module '%s' in line %u.", line, line_no);
@@ -365,6 +371,11 @@ static void config_parse_line(u8* line) {
       case CF_MOD_HTTP:
         http_register_sig(mod_to_srv, generic, sig_class, sig_name, sig_flavor,
                           label_id, cur_sys, cur_sys_cnt, val, line_no);
+        break;
+
+      case CF_MOD_SSL:
+        ssl_register_sig(mod_to_srv, generic, sig_class, sig_name, sig_flavor,
+                         label_id, cur_sys, cur_sys_cnt, val, line_no);
         break;
 
     }

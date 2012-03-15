@@ -1,3 +1,4 @@
+/* -*-mode:c; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
 /*
   p0f - SSL fingerprinting
   -------------------------
@@ -34,6 +35,237 @@
 #include "fp_ssl.h"
 
 
+static struct ssl_sig_record* sigs[2];
+static u32 sig_cnt[2];
+
+
+static u32* load_sig(char** val_ptr) {
+  char *val = *val_ptr;
+  u32 ciphers[128];
+  u8 p = 0;
+  while (p < 128) {
+    u32 optional = 0;
+    if (*val == '*') {
+      ciphers[p++] = MATCH_ANY;
+      val ++;
+    } else {
+      char *pval = val;
+      if (*val == '?') {optional = MATCH_MAYBE; val ++;}
+      ciphers[p] = strtol(val, &val, 16) | optional;
+      if (val != pval) p++;
+    }
+    if (*val != ':' && *val != ',') return NULL;
+    if (*val == ':') break;
+    val ++; // ,
+  }
+
+  *val_ptr = val;
+  u32* ret = DFL_ck_alloc((p + 1) * sizeof(u32));
+  memcpy(ret, ciphers, p * sizeof(u32));
+  ret[p] = END_MARKER;
+  return ret;
+
+}
+
+
+void ssl_register_sig(u8 to_srv, u8 generic, s32 sig_class, u32 sig_name,
+                       u8* sig_flavor, u32 label_id, u32* sys, u32 sys_cnt,
+                       u8* uval, u32 line_no) {
+
+  struct ssl_sig* ssig;
+  struct ssl_sig_record* srec;
+
+  char *val = (char*)uval;
+  ssig = DFL_ck_alloc(sizeof(struct ssl_sig));
+
+  sigs[to_srv] = DFL_ck_realloc(sigs[to_srv], sizeof(struct ssl_sig_record) *
+                                (sig_cnt[to_srv] + 1));
+
+  srec = &sigs[to_srv][sig_cnt[to_srv]];
+
+
+  int maj = strtol(val, &val, 10);
+  if (!val || *val != '.')  FATAL("Malformed signature in line %u.", line_no);
+  val ++;
+  int min = strtol(val, &val, 10);
+  if (!val || *val != ':')  FATAL("Malformed signature in line %u.", line_no);
+  val ++;
+
+  ssig->request_version = (maj << 8) | min;
+
+  ssig->cipher_suites = load_sig(&val);
+  if (!val || *val != ':' || !ssig->cipher_suites) FATAL("Malformed signature in line %u %c.", line_no, *val);
+  val ++;
+
+  ssig->extensions = load_sig(&val);
+  if (!val || *val != ':' || !ssig->extensions) FATAL("Malformed signature in line %u %c.", line_no, *val);
+  val ++;
+
+
+  while (*val) {
+
+    if (!strncmp((char*)val, "compr", 5)) {
+
+      ssig->flags |= SSL_FLAG_COMPR;
+      val += 5;
+
+    } else if (!strncmp((char*)val, "v2", 2)) {
+
+      ssig->flags |= SSL_FLAG_V2;
+      val += 2;
+
+    } else if (!strncmp((char*)val, "ver", 3)) {
+
+      ssig->flags |= SSL_FLAG_VER;
+      val += 3;
+
+    } else if (!strncmp((char*)val, "rand", 4)) {
+
+      ssig->flags |= SSL_FLAG_RAND;
+      val += 4;
+
+    } else if (!strncmp((char*)val, "ktime", 5)) {
+
+      ssig->flags |= SSL_FLAG_KTIME;
+      val += 5;
+
+    } else if (!strncmp((char*)val, "time", 4)) {
+
+      ssig->flags |= SSL_FLAG_TIME;
+      val += 4;
+
+    } else if (!strncmp((char*)val, "stime", 5)) {
+
+      ssig->flags |= SSL_FLAG_STIME;
+      val += 5;
+
+    } else {
+
+      FATAL("Unrecognized flag in line %u.", line_no);
+
+    }
+
+    if (*val == ',') val++;
+
+  }
+
+
+  srec->class_id = sig_class;
+  srec->name_id  = sig_name;
+  srec->flavor   = sig_flavor;
+  srec->label_id = label_id;
+  srec->sys      = sys;
+  srec->sys_cnt  = sys_cnt;
+  srec->line_no  = line_no;
+  srec->generic  = generic;
+
+  srec->sig      = ssig;
+
+  sig_cnt[to_srv]++;
+
+}
+
+
+static int match_sigs(u32* x, u32* c) {
+  u32 *r = x;
+  u32 *c2;
+  u8 match_any = 0;
+
+  for (; *r != END_MARKER && *c != END_MARKER; r++) {
+    if (*r == *c || (*r & ~MATCH_MAYBE) == *c) {
+      /* Exact match, move on */
+      match_any = 0; c++;
+      continue;
+    }
+
+    if (*r == MATCH_ANY) {
+      /* Star, may match anything */
+      match_any = 1;
+      continue;
+    }
+
+    if (*r & MATCH_MAYBE) {
+      /* Optional match */
+      if (!match_any) {
+        /* not fulfilled */
+        continue;
+      } else {
+        for (c2 = c; *c2 != END_MARKER; c2++) {
+          if (*c2 == (*r & ~MATCH_MAYBE)) {
+            /* Match */
+            c = c2 + 1;
+            break;
+          }
+        }
+        /* No optional match (or match if from broken for) */
+        match_any = 0;
+        continue;
+      }
+    }
+
+    if (match_any) {
+      for (; *c != END_MARKER; c++) {
+        if (*r == *c) {
+          c++;
+          break;
+        }
+      }
+      match_any = 0;
+      continue;
+    }
+
+    return 1;
+  }
+
+  while (*r != END_MARKER) {
+    if ((*r & MATCH_MAYBE) || *r == MATCH_ANY) {
+      r ++;
+    } else {
+      break;
+    }
+  }
+
+  if (*r == END_MARKER && *c == END_MARKER)
+    return 0;
+
+  if (*r == END_MARKER && match_any)
+    return 0;
+
+
+  return 1;
+}
+
+
+static void ssl_find_match(u8 to_srv, struct ssl_sig* ts, u8 dupe_det) {
+
+  u32 i;
+
+  for (i = 0; i < sig_cnt[to_srv]; i++) {
+
+    struct ssl_sig_record* ref = sigs[to_srv] + i;
+    struct ssl_sig* rs = CP(ref->sig);
+
+    /* Exact version match. */
+    if (rs->request_version != ts->request_version) continue;
+
+    /* At least flags from the record. */
+    if ((rs->flags & ts->flags) != rs->flags) continue;
+
+    /* Extensions match. */
+    int extensions_match = match_sigs(rs->extensions, ts->extensions);
+    if (extensions_match != 0) continue;
+
+    /* Cipher suites match. */
+    int suites_match = match_sigs(rs->cipher_suites, ts->cipher_suites);
+    if (suites_match != 0) continue;
+
+    ts->matched = ref;
+    return;
+
+  }
+
+}
+
 
 static int fingerprint_ssl_v2(struct ssl_sig *sig, const u8 *pay, u32 pay_len) {
 
@@ -69,17 +301,18 @@ static int fingerprint_ssl_v2(struct ssl_sig *sig, const u8 *pay, u32 pay_len) {
 
   if (pay + cipher_spec_len > pay_end) goto abort_message;
 
-  sig->cipher_suites = ck_alloc((cipher_spec_len / 3) * sizeof(u32));
-  sig->cipher_suites_len = 0;
+  int cipher_pos = 0;
+  sig->cipher_suites = ck_alloc(((cipher_spec_len / 3) + 1) * sizeof(u32));
   tmp_end = pay + cipher_spec_len;
 
   while (pay < tmp_end) {
 
-    sig->cipher_suites[sig->cipher_suites_len++] =
+    sig->cipher_suites[cipher_pos++] =
       (pay[0] << 16) | (pay[1] << 8) | pay[2];
     pay += 3;
 
   }
+  sig->cipher_suites[cipher_pos] = END_MARKER;
 
 
   u16 session_id_len = ntohs(hdr->session_id_length);
@@ -98,12 +331,16 @@ static int fingerprint_ssl_v2(struct ssl_sig *sig, const u8 *pay, u32 pay_len) {
 
 stop:
 
+  sig->extensions    = ck_alloc(1 * sizeof(u32));
+  sig->extensions[0] = END_MARKER;
+
   return 1;
 
 
 abort_message:
 
   ck_free(sig->cipher_suites);
+  ck_free(sig->extensions);
 
   return -1;
 
@@ -179,10 +416,12 @@ static int fingerprint_ssl_v3(struct ssl_sig *sig, const u8 *fragment,
 
   if (sig->remote_time == 0x4d786109) {
 
+    /* Konqueror is known to hardcode SSL timestamp */
     sig->flags |= SSL_FLAG_KTIME;
 
-  } else if (remote_time < 1*365*24*60*60) {
+  } else if (sig->remote_time < 1*365*24*60*60) {
 
+    /* Old Firefox on windows uses */
     sig->flags |= SSL_FLAG_STIME;
 
   } else if (delta > 5*365*24*60*60) {
@@ -233,16 +472,17 @@ static int fingerprint_ssl_v3(struct ssl_sig *sig, const u8 *fragment,
   if (pay + cipher_suites_len > pay_end)
     goto abort_message;
 
-  sig->cipher_suites = ck_alloc((cipher_suites_len / 2) * sizeof(u32));
-  sig->cipher_suites_len = 0;
+  int cipher_pos = 0;
+  sig->cipher_suites = ck_alloc(((cipher_suites_len / 2) + 1) * sizeof(u32));
   tmp_end = pay + cipher_suites_len;
 
   while (pay < tmp_end) {
 
-    sig->cipher_suites[sig->cipher_suites_len++] = (pay[0] << 8) | pay[1];
+    sig->cipher_suites[cipher_pos++] = (pay[0] << 8) | pay[1];
     pay += 2;
 
   }
+  sig->cipher_suites[cipher_pos] = END_MARKER;
 
   if (pay + 1 > pay_end ) goto stop;
 
@@ -251,13 +491,10 @@ static int fingerprint_ssl_v3(struct ssl_sig *sig, const u8 *fragment,
 
   if (pay + compression_methods_len > pay_end ) goto stop;
 
-  sig->compression_methods = ck_alloc(compression_methods_len);
-  sig->compression_methods_len = 0;
   tmp_end = pay + compression_methods_len;
 
   while (pay < tmp_end) {
 
-    sig->compression_methods[sig->compression_methods_len++] = pay[0];
     if (pay[0] == 1) {
       sig->flags |= SSL_FLAG_COMPR;
     }
@@ -273,35 +510,42 @@ static int fingerprint_ssl_v3(struct ssl_sig *sig, const u8 *fragment,
 
   if (pay + extensions_len > pay_end) goto stop;
 
-  sig->extensions = ck_alloc(extensions_len);
-  sig->extensions_len = 0;
+  int extensions_pos = 0;
+  sig->extensions = ck_alloc(((extensions_len / 4) + 1) * sizeof(u32));
   tmp_end = pay + extensions_len;
 
-  DEBUG("[#] SSL extensions=");
-
-  while (pay < tmp_end) {
+  while (pay + 4 <= tmp_end) {
 
     u16 ext_type = (pay[0] << 8) | pay[1];
-    u16 ext_len = (pay[2] << 8) | pay[3];
+    u16 ext_len  = (pay[2] << 8) | pay[3];
     const u8 *extension = &pay[4];
     pay += 4;
 
-    DEBUG("%s%x/", (!sig->extensions_len ? "" : ","), ext_type);
-    for (i=0; i<ext_len; i++) {
-      DEBUG("%02x", pay[i]);
-    }
-
     pay += ext_len;
 
-    if (pay > tmp_end) goto stop;
+    sig->extensions[extensions_pos++] = ext_type;
 
-    sig->extensions[sig->extensions_len++] = ext_type;
+    /* Extension payload sane? */
+    if (pay > tmp_end) break;
 
     /* Ignore the actual value of the extenstion. */
     extension = extension;
   }
 
-  DEBUG("\n");
+  /* Make sure the terminator is always appended, even if extensions
+     are malformed. */
+  sig->extensions = ck_realloc(sig->extensions, (extensions_pos + 1) *
+                               sizeof(u32));
+  sig->extensions[extensions_pos] = END_MARKER;
+
+  if (pay != tmp_end) {
+
+    DEBUG("[#] SSL malformed extensions, %i bytes over.\n",
+          pay - tmp_end);
+    goto stop;
+
+  }
+
 
   if (pay != pay_end) {
 
@@ -319,6 +563,11 @@ static int fingerprint_ssl_v3(struct ssl_sig *sig, const u8 *fragment,
 
 stop:
 
+  if (!sig->extensions) {
+    sig->extensions    = ck_alloc(1*sizeof(u32));
+    sig->extensions[0] = END_MARKER;
+  }
+
   return 1;
 
 
@@ -327,16 +576,12 @@ abort_message:
   DEBUG("[#] SSL Packet malformed.\n");
 
   ck_free(sig->cipher_suites);
-  ck_free(sig->compression_methods);
   ck_free(sig->extensions);
 
   return -1;
 
 }
 
-
-void print_ssl_sig(struct ssl_sig *sig) {
-}
 
 static u8* dump_sig(struct ssl_sig *sig) {
 
@@ -353,18 +598,31 @@ static u8* dump_sig(struct ssl_sig *sig) {
     rlen += _len; \
   } while (0)
 
+  /* RETF("%u:", sig->local_time); */
   RETF("%i.%i:", sig->request_version >> 8, sig->request_version & 0xFF);
 
-  for (i=0; i < sig->cipher_suites_len; i++)
-    RETF("%s%x", (!i ? "" : ","), sig->cipher_suites[i]);
+  for (i=0; sig->cipher_suites[i] != END_MARKER; i++) {
+    u32 c = sig->cipher_suites[i];
+    if (c != MATCH_ANY) {
+      RETF("%s%s%x", (!i ? "" : ","),
+           (c & MATCH_MAYBE) ? "?" : "",
+           c & ~MATCH_MAYBE);
+    } else {
+      RETF("%s*", (!i ? "" : ","));
+    }
+  }
 
   RETF(":");
 
-  for (i=0; i < sig->extensions_len; i++) {
+  for (i=0; sig->extensions[i] != END_MARKER; i++) {
     u32 ext = sig->extensions[i];
-    RETF("%s%s%x", (!i ? "" : ","),
-          (ext == 0 || ext == 5 ? "?" : ""),
-          ext);
+    if (ext != MATCH_ANY) {
+      RETF("%s%s%x", (!i ? "" : ","),
+           ((ext & MATCH_MAYBE) || ext == 0 || ext == 5 ? "?" : ""),
+           ext & ~MATCH_MAYBE);
+    } else {
+      RETF("%s*", (!i ? "" : ","));
+    }
   }
 
   RETF(":");
@@ -406,6 +664,8 @@ static u8* dump_sig(struct ssl_sig *sig) {
   }
 
 
+  /* RETF(":%x", sig->remote_time); */
+
   return ret;
 
 }
@@ -413,7 +673,30 @@ static u8* dump_sig(struct ssl_sig *sig) {
 
 static void fingerprint_ssl(u8 to_srv, struct packet_flow* f, struct ssl_sig *sig) {
 
-  start_observation("ssl request", 1, to_srv, f);
+  struct ssl_sig_record* m;
+  ssl_find_match(to_srv, sig, 0);
+
+  start_observation("ssl request", 4, to_srv, f);
+
+  if ((m = sig->matched)) {
+
+    OBSERVF((m->class_id < 0) ? "app" : "os", "%s%s%s",
+            fp_os_names[m->name_id], m->flavor ? " " : "",
+            m->flavor ? m->flavor : (u8*)"");
+
+    add_observation_field("match_sig", dump_sig(sig->matched->sig));
+  } else {
+    add_observation_field("app", NULL);
+    add_observation_field("match_sig", NULL);
+  }
+
+  if ((sig->flags & (SSL_FLAG_TIME | SSL_FLAG_KTIME | SSL_FLAG_STIME)) == 0) {
+
+    OBSERVF("drift", "%i", abs(sig->remote_time - sig->local_time));
+
+  } else add_observation_field("time_delta", NULL);
+
+// if stime - time from reboot (ff 2.0)
 
   add_observation_field("raw_sig", dump_sig(sig));
 
@@ -519,14 +802,12 @@ u8 process_ssl(u8 to_srv, struct packet_flow *f) {
   strftime(buf, sizeof(buf), "%d/%b/%Y:%T %z", tm);
 
   DEBUG("%s - - [%s] ", addr_to_str(f->client->addr, f->client->ip_ver), buf);
-  print_ssl_sig(&sig);
 
   f->in_ssl = 1;
 
   fingerprint_ssl(to_srv, f, &sig);
 
   ck_free(sig.cipher_suites);
-  ck_free(sig.compression_methods);
   ck_free(sig.extensions);
 
   return 0;

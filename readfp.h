@@ -18,6 +18,7 @@
 #define CF_MOD_TCP           0x00       /* fp_tcp.c                           */
 #define CF_MOD_MTU           0x01       /* fp_mtu.c                           */
 #define CF_MOD_HTTP          0x02       /* fp_http.c                          */
+#define CF_MOD_SSL           0x03       /* fp_ssl.c                           */
 
 /* Parser states: */
 

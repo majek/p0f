@@ -1,3 +1,4 @@
+/* -*-mode:c; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
 /*
    p0f - SSL fingerprinting
    -------------------------
@@ -53,6 +54,8 @@ struct ssl_message_hdr {
 } __attribute__((packed));
 
 
+struct ssl_sig_record;
+
 struct ssl_sig {
 
   u16 record_version;           /* TLS version used on the record layer.  */
@@ -62,15 +65,12 @@ struct ssl_sig {
   u32 local_time;               /* Receive time. */
 
   u32 *cipher_suites;
-  u32 cipher_suites_len;
 
-  u8 *compression_methods;
-  u32 compression_methods_len;
-
-  u16 *extensions;
-  u32 extensions_len;
+  u32 *extensions;
 
   u32 flags;
+
+  struct ssl_sig_record* matched; /* NULL = no match */
 };
 
 #define SSL_FLAG_COMPR 0x0001  /* Deflate compression supported. */
@@ -79,8 +79,36 @@ struct ssl_sig {
 #define SSL_FLAG_RAND  0x0008  /* 0xffff or 0x0000 detected in random. */
 #define SSL_FLAG_KTIME 0x0010  /* SSL client time hardcoded to 0x4d786109 (konqueror does this)  */
 #define SSL_FLAG_TIME  0x0020  /* weird SSL time */
-#define SSL_FLAG_STIME 0x0040  /* small SSL time */
+#define SSL_FLAG_STIME 0x0040  /* small SSL time, since the reboot of vm for old ff */
+
+struct ssl_sig_record {
+
+  s32 class_id;                         /* OS class ID (-1 = user)            */
+  s32 name_id;                          /* OS name ID                         */
+  u8* flavor;                           /* Human-readable flavor string       */
+
+  u32 label_id;                         /* Signature label ID                 */
+
+  u32* sys;                             /* OS class / name IDs for user apps  */
+  u32  sys_cnt;                         /* Length of sys                      */
+
+  u32  line_no;                         /* Line number in p0f.fp              */
+
+  u8 generic;                           /* Generic signature?                 */
+
+  struct ssl_sig* sig;                  /* Actual signature data              */
+
+};
+
+void ssl_register_sig(u8 to_srv, u8 generic, s32 sig_class, u32 sig_name,
+                       u8* sig_flavor, u32 label_id, u32* sys, u32 sys_cnt,
+		      u8* val, u32 line_no);
 
 u8 process_ssl(u8 to_srv, struct packet_flow* f);
+
+
+#define MATCH_MAYBE 0x10000000
+#define MATCH_ANY   0x20000000
+#define END_MARKER  0xFF000000
 
 #endif /* _HAVE_FP_SSL_H */

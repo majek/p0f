@@ -902,3 +902,134 @@ sys   = Linux
 sig   = *:Content-Type,X-Content-Type-Options=[nosniff],Date,Server=[sffe]:Connection,Accept-Ranges,Keep-Alive,Connection:
 sig   = *:Date,Content-Type,Server=[gws]:Connection,Accept-Ranges,Keep-Alive:
 sig   = *:Content-Type,X-Content-Type-Options=[nosniff],Server=[GSE]:Connection,Accept-Ranges,Keep-Alive:
+
+; =====================
+; SSL client signatures
+; =====================
+
+[ssl:request]
+
+label = s:!:Chrome:13-19
+sys   = Windows,@unix
+sig   = 3.1:c00a,c014,88,87,39,38,c00f,*,c003,feff,a:?0,ff01,a,b,23,3374,?5:compr
+
+
+label = s:!:Firefox:1.X
+sys   = Windows,@unix
+sig   = 3.1:10080,30080,*,40080,39,38,35,*,64,62,3,6::v2
+sig   = 3.1:39,38,35,*,64,62,3,6::stime
+
+label = s:!:Firefox:2.X
+sys   = Windows,@unix
+sig   = 3.1:c00a,c014,39,38,c00f,*,c00d,c003,feff,a:?0,a,b:
+
+label = s:!:Firefox:3.X
+sys   = Windows,@unix
+sig   = 3.1:ff,c00a,c014,88,87,38,c00f,84,35,39,*,c00d,c003,feff,a:?0,a,b,23:
+
+label = s:!:Firefox:3.6.28
+sys   = Windows,@unix
+sig   = 3.1:ff,c00a,c014,88,87,38,c00f,c005,84,35,39,*,c00d,c003,feff,a:?0,a,b,23:
+
+label = s:!:Firefox:10 or newer
+sys   = Windows,@unix
+sig   = 3.1:ff,c00a,c014,88,87,39,38,*,c003,feff,a:?0,a,b,23:
+
+
+label = s:!:Safari:4.X (PPC?)
+sys   = Windows,@unix
+sig   = 3.1:2f,5,4,35,a,ff83,*,17,19,1::
+sig   = 3.1:2f,5,4,35,a,ff83,*,17,19,1,10080,*,700c0::v2
+
+label = s:!:Safari:5.1.2
+sys   = Windows,@unix
+sig   = 3.1:c00a,c009,c007,c008,c013,*,33,38,39,16,15,14,13,12,11:?0,a,b:
+
+label = s:!:Safari:5.1.3
+sys   = Windows,@unix
+sig   = 3.1:c00a,c009,c007,c008,c013,*,33,38,39,16,13:?0,a,b:
+
+label = s:!:Android:1.5
+sys   = Android
+sig   = 3.1:39,38,35,16,13,a,33,32,2f,5,4,15,12,9,14,11,8,6,3::
+
+label = s:!:Android:2.3.X
+sys   = Android
+sig   = 3.1:4,5,2f,33,32,a,16,13,9,15,12,3,8,14,11,ff::
+
+label = s:!:Android:3.2
+sys   = Android
+sig   = 3.1:c014,c00a,39,38,c00f,c005,35,*,c00c,c002,5,4,15,12,9,14,11,8,6,3,ff:?0,b,a,23,3374:compr
+
+label = s:!:Android:4.X
+sys   = Android
+sig   = 3.1:c014,c00a,39,38,c00f,c005,35,*,c00c,c002,5,4,ff:?0,b,a,23,3374:compr
+
+label = s:!:HP-tablet:unknown
+sys   = touchpad
+sig   = 3.1:39,38,35,16,13,a,33,32,2f,5,4:?0:
+
+
+label = s:!:Safari:iOS 5.X
+sys   = iOS
+sig   = 3.3:ff,c024,c023,c00a,*,33,39,16:?0,a,b,d:
+
+label = s:!:Safari:iOS 4.X
+sys   = iOS
+sig   = 3.1:c00a,c009,c007,*,33,39,16,15,14:?0,a,b:
+
+
+label = s:!:Opera Mini:11.X
+sys   = Windows,@unix
+sig   = 3.1:?ff,39,38,*,30,2f,5,4,13,d,16,10,a:?0,ff01,?5:
+
+
+label = s:!:IE:7.0 or 8.0
+sys   = Windows
+sig   = 3.1:4,5,a,9,64,62,3,6,13,12,63::
+
+label = s:!:IE:8.0
+sys   = Windows
+sig   = 3.1:4,5,a,9,64,62,3,6,13,12,63:ff01:
+sig   = 3.0:4,5,a,9,64,62,3,6,13,12,63,ff::
+
+label = s:!:IE:9.0
+sys   = Windows
+sig   = 3.1:2f,35,5,a,c013,c014,c009,c00a,32,38,13,4:ff01,?0,?5,a,b:
+
+label = s:!:IE:10.0
+sys   = Windows
+sig   = 3.1:2f,35,5,a,c013,c014,c009,c00a,32,38,13,4:ff01,?0,?5,a,b,23:
+
+
+label = s:!:Opera:11.X
+sys   = Windows,@unix
+sig   = 3.1:ff,6b,6a,69,68,3d,39,38,37,*,13,d,16,10,a:?0,ff01,?5:
+
+
+label = s:!:Konqueror:4.6 or older
+sys   = Linux
+sig   = 3.1:39,38,35,16,13,a,33,32,2f,5,4,15,12,9,14,11,8,6,3,ff:23:compr
+
+label = s:!:Konqueror:4.7 or Rekonq
+sys   = Linux
+sig   = 3.1:c014,c00a,39,38,88,87,c00f,*,8,6,3,ff:b,a,23:compr
+
+
+label = s:!:Epiphany:2.X
+sys   = Linux
+sig   = 3.0:33,39,16,32,38,13,2f,35,a,5,4::
+
+label = s:!:Curl:??
+sys   = @unix
+sig   = 3.1:39,38,35,16,13,a,33,32,2f,5,4,15,12,9,14,11,8,6,3,ff:?0:compr
+
+label = s:!:Wget/rpm/ruby-1.8.7:??
+sys   = @unix
+sig   = 3.1:39,38,35,16,13,a,700c0,33,32,2f,30080,5,4,10080,15,12,9,60040,14,11,8,6,40080,3,20080,ff::v2
+sig   = 3.1:39,38,88,87,35,84,16,13,a,33,32,9a,99,45,44,2f,96,41,5,4,15,12,9,14,11,8,6,3,ff:23:compr
+
+
+label = s:!:Node.js:https client
+sys   = Windows,@unix
+sig   = 3.1:39,38,35,16,13,a,33,32,2f,5,4,15,12,9,14,11,8,6,3,ff:?0,23:
