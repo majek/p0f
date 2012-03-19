@@ -914,11 +914,16 @@ sig   = *:Content-Type,X-Content-Type-Options=[nosniff],Server=[GSE]:Connection,
 ; ------
 
 ; browserlify - windows 7 or vista
-label = s:!:Webkit:Chrome 1-4 or Safari
-sys   = Windows,@unix
+label = s:!:Webkit:Chrome 1-4 or Safari on windows
+sys   = Windows
 sig   = 3.1:2f,35,5,a,c009,c00a,c013,c014,32,38,13,4:?0,a,b,ff01:
 
 ; Chrome 5 looks like IE
+
+; browserlify - chrome 6 sometimes
+label = s:!:Chrome:6
+sys   = Windows,@unix
+sig   = 3.1:c00a,c014,88,87,39,38,c00f,*,c003,feff,a:?0,ff01,a,b,23:compr
 
 ; browserlify - windows 7 or vista
 label = s:!:Chrome:6-15
@@ -1067,16 +1072,18 @@ sig   = 3.1:2f,35,5,a,c009,c00a,c013,c014,32,38,13,4:?0,5,a,b,ff01:
 ; Opera
 ; -----
 
-label = s:!:Opera:10.X
+label = s:!:Opera:10.X or 11.0
 sys   = Windows,@unix
 ; browserling 10.00
 sig   = 3.2:6b,6a,69,68,3d,39,38,37,36,35,67,40,3f,3e,3c,33,32,31,30,2f,5,4,13,d,16,10,a:?0,5:ver
-; browserling 10.50
+; browserling 10.50 or 11.00
 sig   = 3.3:6b,6a,69,68,3d,39,38,37,36,35,67,40,3f,3e,3c,33,32,31,30,2f,5,4,13,d,16,10,a:?0,ff01,5,d:ver
 
-label = s:!:Opera:11.X
+label = s:!:Opera:11.5 or newer
 sys   = Windows,@unix
 sig   = 3.1:6b,6a,69,68,3d,39,38,37,36,35,67,40,3f,3e,3c,33,32,31,30,2f,5,4,13,d,16,10,a:?0,ff01,5:
+; starts with ff on windows? why?
+sig   = 3.1:ff,6b,6a,69,68,3d,39,38,37,36,35,67,40,3f,3e,3c,33,32,31,30,2f,5,4,13,d,16,10,a:?0,ff01,5:
 
 ; On second connection Opera replies with the last used crypto in a first place I guess
 label = s:!:Opera:any
