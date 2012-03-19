@@ -84,7 +84,13 @@ Most of the extensions don't carry any interesting data.
 
      11 d/00080401020101010202
       3 d/00080402040102010202
+      4 d/000a05010401020104030203
       2 d/000e0401050102010403050302030202
      89 d/00140601050104010301020106030503040303030203
 
 
+
+http://blogs.technet.com/b/steriley/archive/2007/11/06/changing-the-ssl-cipher-order-in-internet-explorer-7-on-windows-vista.aspx
+
+
+Test without domain name.... - just IP address
