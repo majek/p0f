@@ -929,6 +929,7 @@ sig   = 3.1:c00a,c014,88,87,39,38,c00f,*,c003,feff,a:?0,ff01,a,b,23:compr
 label = s:!:Chrome:6 or newer
 sys   = Windows,@unix
 sig   = 3.1:c00a,c014,88,87,39,38,c00f,*,c003,feff,a:?0,ff01,a,b,23,3374:compr
+; 5 is on on windows
 sig   = 3.1:c00a,c014,88,87,39,38,c00f,*,c003,feff,a:?0,ff01,a,b,23,3374,5:compr
 
 ; -------
@@ -1035,12 +1036,18 @@ sig   = 3.1:39,38,35,16,13,a,33,32,2f,5,4:?0:
 ; ------------------
 ; IE in all variants
 ; ------------------
+; windows xp sp3, IE6 first packet
+label = s:!:IE:6
+sys   = Windows
+sig   = 3.0:4,5,a,10080,700c0,30080,9,60040,64,62,3,6,20080,40080,13,12,63,ff::v2
+
+
 label = s:!:IE:7 or 8
 sys   = Windows
 sig   = 3.1:4,5,a,9,64,62,3,6,13,12,63::
 
 ; Windows XP pro box
-label = s:!:IE:8 or Safari on windows XP
+label = s:!:IE:6 or 8 or Safari on windows XP
 sys   = Windows
 sig   = 3.1:4,5,a,9,64,62,3,6,13,12,63:ff01:
 ; with TLS 1.1 disabled
