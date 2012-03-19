@@ -618,7 +618,7 @@ static u8* dump_sig(struct ssl_sig *sig) {
     u32 ext = sig->extensions[i];
     if (ext != MATCH_ANY) {
       RETF("%s%s%x", (!i ? "" : ","),
-           ((ext & MATCH_MAYBE) || ext == 0 || ext == 5 ? "?" : ""),
+           ((ext & MATCH_MAYBE) || ext == 0 ? "?" : ""),
            ext & ~MATCH_MAYBE);
     } else {
       RETF("%s*", (!i ? "" : ","));
