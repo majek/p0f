@@ -918,24 +918,15 @@ label = s:!:Webkit:Chrome 1-4 or Safari
 sys   = Windows,@unix
 sig   = 3.1:2f,35,5,a,c009,c00a,c013,c014,32,38,13,4:?0,a,b,ff01:
 
-; browserlify - windows 7 or vista
-label = s:!:Chrome:5
-sys   = Windows,@unix
-sig   = 3.1:2f,35,5,a,c009,c00a,c013,c014,32,38,13,4:?0,a,b,ff01:
-sig   = 3.1:2f,35,5,a,c009,c00a,c013,c014,32,38,13,4:?0,5,a,b,ff01:
+; Chrome 5 looks like IE
 
 ; browserlify - windows 7 or vista
-label = s:!:Chrome:6
-sys   = Windows,@unix
-sig   = 3.1:c00a,c014,88,87,39,38,c00f,*,c003,feff,a:?0,ff01,a,b,23,5:compr
-
-; browserlify - windows 7 or vista
-label = s:!:Chrome:7-16
+label = s:!:Chrome:6-15
 sys   = Windows,@unix
 sig   = 3.1:c00a,c014,88,87,39,38,c00f,*,c003,feff,a:?0,ff01,a,b,23,3374:compr
 
 ; browserlify - windows 7 or vista
-label = s:!:Chrome:17 or newer
+label = s:!:Chrome:16 or newer
 sys   = Windows,@unix
 sig   = 3.1:c00a,c014,88,87,39,38,c00f,*,c003,feff,a:?0,ff01,a,b,23,3374,5:compr
 
@@ -966,8 +957,8 @@ label = s:!:Firefox:3.6.X
 sys   = Windows,@unix
 sig   = 3.1:ff,c00a,c014,88,87,38,c00f,c005,84,35,39,*,c00d,c003,feff,a:?0,a,b,23:
 
-; browserlify - windows 7 or vista
-label = s:!:Firefox:4-10
+; browserlify - windows 7 or vista, confirmed ff 10 on mac
+label = s:!:Firefox:4-11
 sys   = Windows,@unix
 sig   = 3.1:ff,c00a,c014,88,87,39,38,*,c003,feff,a:?0,a,b,23:
 
@@ -1067,7 +1058,7 @@ sys   = Windows
 sig   = 3.1:2f,35,5,a,c013,c014,c009,c00a,32,38,13,4:ff01,?0,5,a,b,23:
 
 ; browserling
-label = s:!:IE Windows Vista: 7-9
+label = s:!:Windows Vista: IE 7-9 or Chrome 5
 sys   = Windows
 sig   = 3.1:2f,35,5,a,c009,c00a,c013,c014,32,38,13,4:?0,5,a,b,ff01:
 
