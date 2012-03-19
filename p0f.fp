@@ -926,13 +926,9 @@ sys   = Windows,@unix
 sig   = 3.1:c00a,c014,88,87,39,38,c00f,*,c003,feff,a:?0,ff01,a,b,23:compr
 
 ; browserlify - windows 7 or vista
-label = s:!:Chrome:6-15
+label = s:!:Chrome:6 or newer
 sys   = Windows,@unix
 sig   = 3.1:c00a,c014,88,87,39,38,c00f,*,c003,feff,a:?0,ff01,a,b,23,3374:compr
-
-; browserlify - windows 7 or vista
-label = s:!:Chrome:16 or newer
-sys   = Windows,@unix
 sig   = 3.1:c00a,c014,88,87,39,38,c00f,*,c003,feff,a:?0,ff01,a,b,23,3374,5:compr
 
 ; -------
