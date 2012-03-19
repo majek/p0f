@@ -909,10 +909,39 @@ sig   = *:Content-Type,X-Content-Type-Options=[nosniff],Server=[GSE]:Connection,
 
 [ssl:request]
 
-label = s:!:Chrome:13-19
-sys   = Windows,@unix
-sig   = 3.1:c00a,c014,88,87,39,38,c00f,*,c003,feff,a:?0,ff01,a,b,23,3374,?5:compr
+; ------
+; Chrome
+; ------
 
+; browserlify - windows 7 or vista
+label = s:!:Webkit:Chrome 1-4 or Safari
+sys   = Windows,@unix
+sig   = 3.1:2f,35,5,a,c009,c00a,c013,c014,32,38,13,4:?0,a,b,ff01:
+
+; browserlify - windows 7 or vista
+label = s:!:Chrome:5
+sys   = Windows,@unix
+sig   = 3.1:2f,35,5,a,c009,c00a,c013,c014,32,38,13,4:?0,a,b,ff01:
+sig   = 3.1:2f,35,5,a,c009,c00a,c013,c014,32,38,13,4:?0,5,a,b,ff01:
+
+; browserlify - windows 7 or vista
+label = s:!:Chrome:6
+sys   = Windows,@unix
+sig   = 3.1:c00a,c014,88,87,39,38,c00f,*,c003,feff,a:?0,ff01,a,b,23,5:compr
+
+; browserlify - windows 7 or vista
+label = s:!:Chrome:7-16
+sys   = Windows,@unix
+sig   = 3.1:c00a,c014,88,87,39,38,c00f,*,c003,feff,a:?0,ff01,a,b,23,3374:compr
+
+; browserlify - windows 7 or vista
+label = s:!:Chrome:17 or newer
+sys   = Windows,@unix
+sig   = 3.1:c00a,c014,88,87,39,38,c00f,*,c003,feff,a:?0,ff01,a,b,23,3374,5:compr
+
+; -------
+; Firefox
+; -------
 
 label = s:!:Firefox:1.X
 sys   = Windows,@unix
@@ -923,20 +952,36 @@ label = s:!:Firefox:2.X
 sys   = Windows,@unix
 sig   = 3.1:c00a,c014,39,38,c00f,*,c00d,c003,feff,a:?0,a,b:
 
-label = s:!:Firefox:3.X
-sys   = Windows,@unix
-sig   = 3.1:ff,c00a,c014,88,87,38,c00f,84,35,39,*,c00d,c003,feff,a:?0,a,b,23:
+;label = s:!:Firefox:3.X
+;sys   = Windows,@unix
+;sig   = 3.1:ff,c00a,c014,88,87,38,c00f,84,35,39,*,c00d,c003,feff,a:?0,a,b,23:
 
-label = s:!:Firefox:3.6.28
+; browserlify - windows 7 or vista
+label = s:!:Firefox:3.0-3.5
+sys   = Windows,@unix
+sig   = 3.1:c00a,c014,88,87,39,38,c00f,c005,84,35,c007,*,c003,feff,a:?0,a,b,23:
+
+; browserlify - windows 7 or vista
+label = s:!:Firefox:3.6.X
 sys   = Windows,@unix
 sig   = 3.1:ff,c00a,c014,88,87,38,c00f,c005,84,35,39,*,c00d,c003,feff,a:?0,a,b,23:
 
-label = s:!:Firefox:10 or newer
+; browserlify - windows 7 or vista
+label = s:!:Firefox:4-10
 sys   = Windows,@unix
 sig   = 3.1:ff,c00a,c014,88,87,39,38,*,c003,feff,a:?0,a,b,23:
 
+; browserlify - windows 7 or vista
+label = s:!:Firefox:14 or newer
+sys   = Windows,@unix
+sig   = 3.1:ff,c00a,c014,88,87,39,38,*,c003,feff,a:?0,a,b,23,3374:
 
-label = s:!:Safari:4.X (PPC?)
+
+; ------
+; Safari
+; ------
+; Safari on old PowerPC box
+label = s:!:Safari:4.X
 sys   = Windows,@unix
 sig   = 3.1:2f,5,4,35,a,ff83,*,17,19,1::
 sig   = 3.1:2f,5,4,35,a,ff83,*,17,19,1,10080,*,700c0::v2
@@ -945,9 +990,14 @@ label = s:!:Safari:5.1.2
 sys   = Windows,@unix
 sig   = 3.1:c00a,c009,c007,c008,c013,*,33,38,39,16,15,14,13,12,11:?0,a,b:
 
-label = s:!:Safari:5.1.3
+label = s:!:Safari:5.1.3 or newer
 sys   = Windows,@unix
 sig   = 3.1:c00a,c009,c007,c008,c013,*,33,38,39,16,13:?0,a,b:
+
+
+; -------
+; Android
+; -------
 
 label = s:!:Android:1.5
 sys   = Android
@@ -965,49 +1015,94 @@ label = s:!:Android:4.X
 sys   = Android
 sig   = 3.1:c014,c00a,39,38,c00f,c005,35,*,c00c,c002,5,4,ff:?0,b,a,23,3374:compr
 
-label = s:!:HP-tablet:unknown
-sys   = touchpad
-sig   = 3.1:39,38,35,16,13,a,33,32,2f,5,4:?0:
-
-
-label = s:!:Safari:iOS 5.X
-sys   = iOS
-sig   = 3.3:ff,c024,c023,c00a,*,33,39,16:?0,a,b,d:
+; -----------
+; iPhone iPad
+; -----------
 
 label = s:!:Safari:iOS 4.X
 sys   = iOS
 sig   = 3.1:c00a,c009,c007,*,33,39,16,15,14:?0,a,b:
 
+label = s:!:Safari:iOS 5.X
+sys   = iOS
+sig   = 3.3:ff,c024,c023,c00a,*,33,39,16:?0,a,b,d:
 
+
+; ------------
+; Weird Mobile
+; ------------
 label = s:!:Opera Mini:11.X
 sys   = Windows,@unix
-sig   = 3.1:?ff,39,38,*,30,2f,5,4,13,d,16,10,a:?0,ff01,?5:
+sig   = 3.1:?ff,39,38,*,30,2f,5,4,13,d,16,10,a:?0,ff01,5:
+
+label = s:!:HP-tablet:unknown
+sys   = touchpad
+sig   = 3.1:39,38,35,16,13,a,33,32,2f,5,4:?0:
 
 
-label = s:!:IE:7.0 or 8.0
+; ------------------
+; IE in all variants
+; ------------------
+label = s:!:IE:7 or 8
 sys   = Windows
 sig   = 3.1:4,5,a,9,64,62,3,6,13,12,63::
 
-label = s:!:IE:8.0
+; Windows XP pro box
+label = s:!:IE:8 or Safari on windows XP
 sys   = Windows
 sig   = 3.1:4,5,a,9,64,62,3,6,13,12,63:ff01:
+; with TLS 1.1 disabled
 sig   = 3.0:4,5,a,9,64,62,3,6,13,12,63,ff::
+; with TLS 1.1 and SSL 3.0 disabled
+sig   = 2.0:10080,700c0,30080,60040,20080,40080,ff::v2
 
-label = s:!:IE:9.0
+label = s:!:IE:9
 sys   = Windows
-sig   = 3.1:2f,35,5,a,c013,c014,c009,c00a,32,38,13,4:ff01,?0,?5,a,b:
+sig   = 3.1:2f,35,5,a,c013,c014,c009,c00a,32,38,13,4:ff01,?0,5,a,b:
+; Some weirdly configured IE9
+sig   = 3.0:5,a,13,4,10080,700c0,ff::v2
 
-label = s:!:IE:10.0
+label = s:!:IE:10
 sys   = Windows
-sig   = 3.1:2f,35,5,a,c013,c014,c009,c00a,32,38,13,4:ff01,?0,?5,a,b,23:
+sig   = 3.1:2f,35,5,a,c013,c014,c009,c00a,32,38,13,4:ff01,?0,5,a,b,23:
 
+; browserling
+label = s:!:IE Windows Vista: 7-9
+sys   = Windows
+sig   = 3.1:2f,35,5,a,c009,c00a,c013,c014,32,38,13,4:?0,5,a,b,ff01:
+
+
+; -----
+; Opera
+; -----
+
+label = s:!:Opera:10.X
+sys   = Windows,@unix
+; browserling 10.00
+sig   = 3.2:6b,6a,69,68,3d,39,38,37,36,35,67,40,3f,3e,3c,33,32,31,30,2f,5,4,13,d,16,10,a:?0,5:ver
+; browserling 10.50
+sig   = 3.3:6b,6a,69,68,3d,39,38,37,36,35,67,40,3f,3e,3c,33,32,31,30,2f,5,4,13,d,16,10,a:?0,ff01,5,d:ver
 
 label = s:!:Opera:11.X
 sys   = Windows,@unix
-sig   = 3.1:ff,6b,6a,69,68,3d,39,38,37,*,13,d,16,10,a:?0,ff01,?5:
+sig   = 3.1:6b,6a,69,68,3d,39,38,37,36,35,67,40,3f,3e,3c,33,32,31,30,2f,5,4,13,d,16,10,a:?0,ff01,5:
+
+; On second connection Opera replies with the last used crypto in a first place I guess
+label = s:!:Opera:any
+sys   = Windows,@unix
+sig   = 3.1:*,6b,6a,69,68,3d,*,13,d,16,10,a:?0,?ff01,5:
+sig   = 3.1:*,39,38,37,36,35,*,13,d,16,10,a:?0,?ff01,5:
+sig   = 3.2:*,6b,6a,69,68,3d,*,13,d,16,10,a:?0,?ff01,5:
+sig   = 3.2:*,39,38,37,36,35,*,13,d,16,10,a:?0,?ff01,5:
+sig   = 3.3:*,6b,6a,69,68,3d,*,13,d,16,10,a:?0,?ff01,5:
+sig   = 3.3:*,39,38,37,36,35,*,13,d,16,10,a:?0,?ff01,5:
 
 
-label = s:!:Konqueror:4.6 or older
+; -----------------------------
+; Less popular desktop browsers
+; -----------------------------
+
+label = s:!:Konqueror:4.6 or older or wget 1.12 (openssl)
 sys   = Linux
 sig   = 3.1:39,38,35,16,13,a,33,32,2f,5,4,15,12,9,14,11,8,6,3,ff:23:compr
 
@@ -1020,6 +1115,17 @@ label = s:!:Epiphany:2.X
 sys   = Linux
 sig   = 3.0:33,39,16,32,38,13,2f,35,a,5,4::
 
+label = s:!:openssl:on Mac OS X (Darwin)
+sys   = @unix
+sig   = 3.1:39,38,35,16,13,a,700c0,33,32,2f,9a,99,96,30080,5,4,10080,15,12,9,60040,14,11,8,6,40080,3,20080,ff::v2
+sig   = 3.1:39,38,35,16,13,a,33,32,2f,9a,99,96,5,4,15,12,9,14,11,8,6,3,ff:?0,23:compr
+sig   = 3.1:39,38,35,16,13,a,33,32,2f,9a,99,96,5,4,15,12,9,14,11,8,6,3,ff:?0:compr
+
+label = s:!:gnutls:on linux
+sys   = @unix
+sig   = 3.1:33,16,39,2f,a,35,5,4,32,13,38,66::compr
+sig   = 3.2:2f,5,4,a,35,32,66,13,38,33,16,39,34,18,1b,3a,3::
+
 label = s:!:Curl:??
 sys   = @unix
 sig   = 3.1:39,38,35,16,13,a,33,32,2f,5,4,15,12,9,14,11,8,6,3,ff:?0:compr
@@ -1028,7 +1134,6 @@ label = s:!:Wget/rpm/ruby-1.8.7:??
 sys   = @unix
 sig   = 3.1:39,38,35,16,13,a,700c0,33,32,2f,30080,5,4,10080,15,12,9,60040,14,11,8,6,40080,3,20080,ff::v2
 sig   = 3.1:39,38,88,87,35,84,16,13,a,33,32,9a,99,45,44,2f,96,41,5,4,15,12,9,14,11,8,6,3,ff:23:compr
-
 
 label = s:!:Node.js:https client
 sys   = Windows,@unix
