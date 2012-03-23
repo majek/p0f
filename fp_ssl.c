@@ -124,11 +124,6 @@ void ssl_register_sig(u8 to_srv, u8 generic, s32 sig_class, u32 sig_name,
       ssig->flags |= SSL_FLAG_RAND;
       val += 4;
 
-    } else if (!strncmp((char*)val, "ktime", 5)) {
-
-      ssig->flags |= SSL_FLAG_KTIME;
-      val += 5;
-
     } else if (!strncmp((char*)val, "time", 4)) {
 
       ssig->flags |= SSL_FLAG_TIME;
@@ -414,12 +409,7 @@ static int fingerprint_ssl_v3(struct ssl_sig *sig, const u8 *fragment,
   sig->local_time  = local_time;
   s32 delta = abs((s32)(sig->local_time - sig->remote_time));
 
-  if (sig->remote_time == 0x4d786109) {
-
-    /* Konqueror is known to hardcode SSL timestamp */
-    sig->flags |= SSL_FLAG_KTIME;
-
-  } else if (sig->remote_time < 1*365*24*60*60) {
+  if (sig->remote_time < 1*365*24*60*60) {
 
     /* Old Firefox on windows uses */
     sig->flags |= SSL_FLAG_STIME;
@@ -648,11 +638,6 @@ static u8* dump_sig(struct ssl_sig *sig) {
     had_prev = 1;
   }
 
-  if (sig->flags & SSL_FLAG_KTIME) {
-    RETF("%sktime", had_prev ? "," : "");
-    had_prev = 1;
-  }
-
   if (sig->flags & SSL_FLAG_TIME) {
     RETF("%stime", had_prev ? "," : "");
     had_prev = 1;
@@ -690,11 +675,11 @@ static void fingerprint_ssl(u8 to_srv, struct packet_flow* f, struct ssl_sig *si
     add_observation_field("match_sig", NULL);
   }
 
-  if ((sig->flags & (SSL_FLAG_TIME | SSL_FLAG_KTIME | SSL_FLAG_STIME)) == 0) {
+  if ((sig->flags & (SSL_FLAG_TIME | SSL_FLAG_STIME)) == 0) {
 
     OBSERVF("drift", "%i", abs(sig->remote_time - sig->local_time));
 
-  } else add_observation_field("time_delta", NULL);
+  } else add_observation_field("drift", NULL);
 
 // if stime - time from reboot (ff 2.0)
 

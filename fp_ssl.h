@@ -77,9 +77,8 @@ struct ssl_sig {
 #define SSL_FLAG_V2    0x0002  /* SSLv2 handshake. */
 #define SSL_FLAG_VER   0x0004  /* Record version different than ClientHello. */
 #define SSL_FLAG_RAND  0x0008  /* 0xffff or 0x0000 detected in random. */
-#define SSL_FLAG_KTIME 0x0010  /* SSL client time hardcoded to 0x4d786109 (konqueror does this)  */
-#define SSL_FLAG_TIME  0x0020  /* weird SSL time */
-#define SSL_FLAG_STIME 0x0040  /* small SSL time, since the reboot of vm for old ff */
+#define SSL_FLAG_TIME  0x0010  /* weird SSL time */
+#define SSL_FLAG_STIME 0x0020  /* small SSL time, since the reboot of vm for old ff */
 
 struct ssl_sig_record {
 
