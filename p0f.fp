@@ -996,6 +996,11 @@ label = s:!:Firefox:14 or newer
 sys   = Windows,@unix
 sig   = 3.1:ff,c00a,c014,88,87,39,38,*,c003,feff,a:?0,a,b,23,3374:
 
+; with TLS switched off
+label = s:!:Firefox:3.6.X or newer
+sys   = Windows,@unix
+sig   = 3.0:ff,88,87,39,38,84,35,45,44,33,32,96,41,4,5,2f,16,13,feff,a::
+
 
 ; ------
 ; Safari
@@ -1059,44 +1064,6 @@ sig   = 3.1:ff,39,38,37,36,35,33,32,31,30,2f,5,4,13,d,16,10,a:?0,ff01,5:
 label = s:!:HP-tablet:unknown
 sys   = touchpad
 sig   = 3.1:39,38,35,16,13,a,33,32,2f,5,4:?0:
-
-
-; ------------------
-; IE in all variants
-; ------------------
-; windows xp sp3, IE6 first packet
-label = s:!:IE:6
-sys   = Windows
-sig   = 3.0:4,5,a,10080,700c0,30080,9,60040,64,62,3,6,20080,40080,13,12,63,ff::v2
-
-
-label = s:!:IE:7 or 8
-sys   = Windows
-sig   = 3.1:4,5,a,9,64,62,3,6,13,12,63::
-
-; Windows XP pro box
-label = s:!:IE:6 or 8 or Safari on windows XP
-sys   = Windows
-sig   = 3.1:4,5,a,9,64,62,3,6,13,12,63:ff01:
-; with TLS 1.1 disabled
-sig   = 3.0:4,5,a,9,64,62,3,6,13,12,63,ff::
-; with TLS 1.1 and SSL 3.0 disabled
-sig   = 2.0:10080,700c0,30080,60040,20080,40080,ff::v2
-
-label = s:!:IE:9
-sys   = Windows
-sig   = 3.1:2f,35,5,a,c013,c014,c009,c00a,32,38,13,4:ff01,?0,5,a,b:
-; Some weirdly configured IE9
-sig   = 3.0:5,a,13,4,10080,700c0,ff::v2
-
-label = s:!:IE:10
-sys   = Windows
-sig   = 3.1:2f,35,5,a,c013,c014,c009,c00a,32,38,13,4:ff01,?0,5,a,b,23:
-
-; browserling
-label = s:!:Windows Vista: IE 7-9 or Chrome 5
-sys   = Windows
-sig   = 3.1:2f,35,5,a,c009,c00a,c013,c014,32,38,13,4:?0,5,a,b,ff01:
 
 
 ; -----
