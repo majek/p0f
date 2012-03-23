@@ -909,25 +909,60 @@ sig   = *:Content-Type,X-Content-Type-Options=[nosniff],Server=[GSE]:Connection,
 
 [ssl:request]
 
+;-----------------
+; Windows specific
+;-----------------
+
+; Windows NT 5.1, Windows NT 5.2 (XP)
+label = s:!:any:MSIE or Safari on Windows XP
+sys   = Windows XP
+sig   = 3.1:4,5,a,9,64,62,3,6,13,12,63:ff01:
+; no MS10-049 applied?
+sig   = 3.1:4,5,a,9,64,62,3,6,13,12,63::
+
+; some SSL/TLS options tweaked
+sig   = 3.0:4,5,a,9,64,62,3,6,13,12,63,ff::
+sig   = 3.0:4,5,a,10080,700c0,30080,9,60040,64,62,3,6,20080,40080,13,12,63,ff::v2
+sig   = 2.0:10080,700c0,30080,60040,20080,40080,ff::v2
+
+
+; Windows NT 6.0 (Vista)
+label = s:!:any:MSIE 5.5-6 or Chrome 1-4 or Safari on Windows Vista
+sys   = Windows Vista
+sig   = 3.1:2f,35,5,a,c009,c00a,c013,c014,32,38,13,4:?0,a,b,ff01:
+
+label = s:!:any:MSIE 7.0-9.0 or Chrome 5 on Windows Vista
+sys   = Windows Vista
+sig   = 3.1:2f,35,5,a,c009,c00a,c013,c014,32,38,13,4:?0,5,a,b,ff01:
+
+
+; Windows NT 6.1 (7)
+label = s:!:MSIE:7-9
+sys   = Windows 7
+sig   = 3.1:2f,35,5,a,c013,c014,c009,c00a,32,38,13,4:ff01,?0,5,a,b:
+
+label = s:!:Safari:
+sys   = Windows 7
+sig   = 3.1:2f,35,5,a,c013,c014,c009,c00a,32,38,13,4:ff01,?0,a,b:
+
+; Windows NT 6.2 (8)
+; 23 usually means NT 6.2
+label = s:!:MSIE:10
+sys   = Windows 8
+sig   = 3.1:2f,35,5,a,c013,c014,c009,c00a,32,38,13,4:ff01,?0,5,a,b,23:
+
+label = s:!:Safari:
+sys   = Windows 8
+sig   = 3.1:2f,35,5,a,c013,c014,c009,c00a,32,38,13,4:ff01,?0,a,b,23:
+
+
 ; ------
 ; Chrome
 ; ------
 
-; browserlify - windows 7 or vista
-label = s:!:Webkit:Chrome 1-4 or Safari on windows
-sys   = Windows
-sig   = 3.1:2f,35,5,a,c009,c00a,c013,c014,32,38,13,4:?0,a,b,ff01:
-
-; Chrome 5 looks like IE
-
-; browserlify - chrome 6 sometimes
-label = s:!:Chrome:6
-sys   = Windows,@unix
-sig   = 3.1:c00a,c014,88,87,39,38,c00f,*,c003,feff,a:?0,ff01,a,b,23:compr
-
-; browserlify - windows 7 or vista
 label = s:!:Chrome:6 or newer
 sys   = Windows,@unix
+sig   = 3.1:c00a,c014,88,87,39,38,c00f,*,c003,feff,a:?0,ff01,a,b,23:compr
 sig   = 3.1:c00a,c014,88,87,39,38,c00f,*,c003,feff,a:?0,ff01,a,b,23,3374:compr
 sig   = 3.1:c00a,c014,88,87,39,38,c00f,*,c003,feff,a:?0,ff01,a,b,23,3374,5:compr
 
@@ -944,26 +979,18 @@ label = s:!:Firefox:2.X
 sys   = Windows,@unix
 sig   = 3.1:c00a,c014,39,38,c00f,*,c00d,c003,feff,a:?0,a,b:
 
-;label = s:!:Firefox:3.X
-;sys   = Windows,@unix
-;sig   = 3.1:ff,c00a,c014,88,87,38,c00f,84,35,39,*,c00d,c003,feff,a:?0,a,b,23:
-
-; browserlify - windows 7 or vista
 label = s:!:Firefox:3.0-3.5
 sys   = Windows,@unix
 sig   = 3.1:c00a,c014,88,87,39,38,c00f,c005,84,35,c007,*,c003,feff,a:?0,a,b,23:
 
-; browserlify - windows 7 or vista
 label = s:!:Firefox:3.6.X
 sys   = Windows,@unix
 sig   = 3.1:ff,c00a,c014,88,87,38,c00f,c005,84,35,39,*,c00d,c003,feff,a:?0,a,b,23:
 
-; browserlify - windows 7 or vista, confirmed ff 10 on mac
 label = s:!:Firefox:4-11
 sys   = Windows,@unix
 sig   = 3.1:ff,c00a,c014,88,87,39,38,*,c003,feff,a:?0,a,b,23:
 
-; browserlify - windows 7 or vista
 label = s:!:Firefox:14 or newer
 sys   = Windows,@unix
 sig   = 3.1:ff,c00a,c014,88,87,39,38,*,c003,feff,a:?0,a,b,23,3374:
@@ -974,16 +1001,16 @@ sig   = 3.1:ff,c00a,c014,88,87,39,38,*,c003,feff,a:?0,a,b,23,3374:
 ; ------
 ; Safari on old PowerPC box
 label = s:!:Safari:4.X
-sys   = Windows,@unix
+sys   = OS X
 sig   = 3.1:2f,5,4,35,a,ff83,*,17,19,1::
 sig   = 3.1:2f,5,4,35,a,ff83,*,17,19,1,10080,*,700c0::v2
 
 label = s:!:Safari:5.1.2
-sys   = Windows,@unix
+sys   = OS X
 sig   = 3.1:c00a,c009,c007,c008,c013,*,33,38,39,16,15,14,13,12,11:?0,a,b:
 
 label = s:!:Safari:5.1.3 or newer
-sys   = Windows,@unix
+sys   = OS X
 sig   = 3.1:c00a,c009,c007,c008,c013,*,33,38,39,16,13:?0,a,b:
 
 
@@ -991,11 +1018,11 @@ sig   = 3.1:c00a,c009,c007,c008,c013,*,33,38,39,16,13:?0,a,b:
 ; Android
 ; -------
 
-label = s:!:Android:1.5
+label = s:!:Android:1.5-2.1
 sys   = Android
 sig   = 3.1:39,38,35,16,13,a,33,32,2f,5,4,15,12,9,14,11,8,6,3::
 
-label = s:!:Android:2.3.X
+label = s:!:Android:2.3
 sys   = Android
 sig   = 3.1:4,5,2f,33,32,a,16,13,9,15,12,3,8,14,11,ff::
 
@@ -1025,64 +1052,30 @@ sig   = 3.3:ff,c024,c023,c00a,*,33,39,16:?0,a,b,d:
 ; ------------
 label = s:!:Opera Mini:11.X
 sys   = Windows,@unix
-sig   = 3.1:?ff,39,38,*,30,2f,5,4,13,d,16,10,a:?0,ff01,5:
+sig   = 3.1:39,38,37,36,35,33,32,31,30,2f,5,4,13,d,16,10,a:?0,ff01,5:
+sig   = 3.1:ff,39,38,37,36,35,33,32,31,30,2f,5,4,13,d,16,10,a:?0,ff01,5:
 
 label = s:!:HP-tablet:unknown
 sys   = touchpad
 sig   = 3.1:39,38,35,16,13,a,33,32,2f,5,4:?0:
 
 
-; ------------------
-; IE in all variants
-; ------------------
-label = s:!:IE:7 or 8
-sys   = Windows
-sig   = 3.1:4,5,a,9,64,62,3,6,13,12,63::
-
-; Windows XP pro box
-label = s:!:IE:8 or Safari on windows XP
-sys   = Windows
-sig   = 3.1:4,5,a,9,64,62,3,6,13,12,63:ff01:
-; with TLS 1.1 disabled
-sig   = 3.0:4,5,a,9,64,62,3,6,13,12,63,ff::
-; with TLS 1.1 and SSL 3.0 disabled
-sig   = 2.0:10080,700c0,30080,60040,20080,40080,ff::v2
-
-label = s:!:IE:9
-sys   = Windows
-sig   = 3.1:2f,35,5,a,c013,c014,c009,c00a,32,38,13,4:ff01,?0,5,a,b:
-; Some weirdly configured IE9
-sig   = 3.0:5,a,13,4,10080,700c0,ff::v2
-
-label = s:!:IE:10
-sys   = Windows
-sig   = 3.1:2f,35,5,a,c013,c014,c009,c00a,32,38,13,4:ff01,?0,5,a,b,23:
-
-; browserling
-label = s:!:Windows Vista: IE 7-9 or Chrome 5
-sys   = Windows
-sig   = 3.1:2f,35,5,a,c009,c00a,c013,c014,32,38,13,4:?0,5,a,b,ff01:
-
-
 ; -----
 ; Opera
 ; -----
 
-label = s:!:Opera:10.X or 11.0
+label = s:!:Opera:10.x - 11.00
 sys   = Windows,@unix
-; browserling 10.00
 sig   = 3.2:6b,6a,69,68,3d,39,38,37,36,35,67,40,3f,3e,3c,33,32,31,30,2f,5,4,13,d,16,10,a:?0,5:ver
-; browserling 10.50 or 11.00
 sig   = 3.3:6b,6a,69,68,3d,39,38,37,36,35,67,40,3f,3e,3c,33,32,31,30,2f,5,4,13,d,16,10,a:?0,ff01,5,d:ver
 
-label = s:!:Opera:11.5 or newer
+label = s:!:Opera:11.52 or newer
 sys   = Windows,@unix
 sig   = 3.1:6b,6a,69,68,3d,39,38,37,36,35,67,40,3f,3e,3c,33,32,31,30,2f,5,4,13,d,16,10,a:?0,ff01,5:
-; starts with ff on windows? why?
 sig   = 3.1:ff,6b,6a,69,68,3d,39,38,37,36,35,67,40,3f,3e,3c,33,32,31,30,2f,5,4,13,d,16,10,a:?0,ff01,5:
 
 ; On second connection Opera replies with the last used crypto in a first place I guess
-label = s:!:Opera:any
+label = s:!:Opera:
 sys   = Windows,@unix
 sig   = 3.1:*,6b,6a,69,68,3d,*,13,d,16,10,a:?0,?ff01,5:
 sig   = 3.1:*,39,38,37,36,35,*,13,d,16,10,a:?0,?ff01,5:
@@ -1092,43 +1085,38 @@ sig   = 3.3:*,6b,6a,69,68,3d,*,13,d,16,10,a:?0,?ff01,5:
 sig   = 3.3:*,39,38,37,36,35,*,13,d,16,10,a:?0,?ff01,5:
 
 
-; -----------------------------
-; Less popular desktop browsers
-; -----------------------------
+; --------------
+; Various things
+; --------------
 
-label = s:!:Konqueror:4.6 or older or wget 1.12 (openssl)
-sys   = Linux
+label = g:!:gnutls:
+sys   = @unix
+sig   = 3.1:33,16,39,2f,a,35,5,4,32,13,38,66::compr
+sig   = 3.2:2f,5,4,a,35,32,66,13,38,33,16,39,34,18,1b,3a,3::
+sig   = 3.3:3c,2f,5,4,a,3d,35,40,32,66,13,6a,38,67,33,16,6b,39,6c,34,18,1b,6d,3a:ff01,d:
+sig   = 3.1:*,2f,5,4,a,*,35,*,18,1b,3a,*:?ff01,?d:
+
+
+label = g:!:openssl:
+sys   = @unix
 sig   = 3.1:39,38,35,16,13,a,33,32,2f,5,4,15,12,9,14,11,8,6,3,ff:23:compr
+sig   = 3.1:39,38,35,16,13,a,33,32,2f,5,4,15,12,9,14,11,8,6,3,ff:?0:compr
+sig   = 3.1:39,38,35,16,13,a,33,32,2f,5,4,15,12,9,14,11,8,6,3,ff:?0,23:
+sig   = 3.1:39,38,35,16,13,a,33,32,2f,9a,99,96,5,4,15,12,9,14,11,8,6,3,ff:?0,23:compr
+sig   = 3.1:39,38,35,16,13,a,33,32,2f,9a,99,96,5,4,15,12,9,14,11,8,6,3,ff:?0:compr
 
-label = s:!:Konqueror:4.7 or Rekonq
-sys   = Linux
 sig   = 3.1:c014,c00a,39,38,88,87,c00f,*,8,6,3,ff:b,a,23:compr
+; darwin
+sig   = 3.1:39,38,35,16,13,a,700c0,33,32,2f,9a,99,96,30080,5,4,10080,15,12,9,60040,14,11,8,6,40080,3,20080,ff::v2
+sig   = 3.1:39,38,35,16,13,a,700c0,33,32,2f,30080,5,4,10080,15,12,9,60040,14,11,8,6,40080,3,20080,ff::v2
+sig   = 3.1:39,38,88,87,35,84,16,13,a,33,32,9a,99,45,44,2f,96,41,5,4,15,12,9,14,11,8,6,3,ff:23:compr
+sig   = 3.1:c014,c00a,39,38,88,87,c00f,c005,35,84,c012,c008,16,13,c00d,c003,a,c013,c009,33,32,9a,99,45,44,c00e,c004,2f,96,41,c011,c007,c00c,c002,5,4,15,12,9,14,11,8,6,3,ff:?0,b,a:compr
+sig   = 3.1:c014,c00a,39,38,88,87,c00f,c005,35,84,c012,c008,16,13,c00d,c003,a,c013,c009,33,32,9a,99,45,44,c00e,c004,2f,96,41,c011,c007,c00c,c002,5,4,15,12,9,14,11,8,6,3,ff:b,a,23:compr
 
 
 label = s:!:Epiphany:2.X
 sys   = Linux
 sig   = 3.0:33,39,16,32,38,13,2f,35,a,5,4::
 
-label = s:!:openssl:on Mac OS X (Darwin)
-sys   = @unix
-sig   = 3.1:39,38,35,16,13,a,700c0,33,32,2f,9a,99,96,30080,5,4,10080,15,12,9,60040,14,11,8,6,40080,3,20080,ff::v2
-sig   = 3.1:39,38,35,16,13,a,33,32,2f,9a,99,96,5,4,15,12,9,14,11,8,6,3,ff:?0,23:compr
-sig   = 3.1:39,38,35,16,13,a,33,32,2f,9a,99,96,5,4,15,12,9,14,11,8,6,3,ff:?0:compr
 
-label = s:!:gnutls:on linux
-sys   = @unix
-sig   = 3.1:33,16,39,2f,a,35,5,4,32,13,38,66::compr
-sig   = 3.2:2f,5,4,a,35,32,66,13,38,33,16,39,34,18,1b,3a,3::
 
-label = s:!:Curl:??
-sys   = @unix
-sig   = 3.1:39,38,35,16,13,a,33,32,2f,5,4,15,12,9,14,11,8,6,3,ff:?0:compr
-
-label = s:!:Wget/rpm/ruby-1.8.7:??
-sys   = @unix
-sig   = 3.1:39,38,35,16,13,a,700c0,33,32,2f,30080,5,4,10080,15,12,9,60040,14,11,8,6,40080,3,20080,ff::v2
-sig   = 3.1:39,38,88,87,35,84,16,13,a,33,32,9a,99,45,44,2f,96,41,5,4,15,12,9,14,11,8,6,3,ff:23:compr
-
-label = s:!:Node.js:https client
-sys   = Windows,@unix
-sig   = 3.1:39,38,35,16,13,a,33,32,2f,5,4,15,12,9,14,11,8,6,3,ff:?0,23:
