@@ -967,6 +967,10 @@ sig   = 3.1:c00a,c014,88,87,39,38,c00f,*,c003,feff,a:?0,ff01,a,b,23,3374:compr
 ; 5 is on on windows
 sig   = 3.1:c00a,c014,88,87,39,38,c00f,*,c003,feff,a:?0,ff01,a,b,23,3374,5:compr
 
+label = s:!:Chrome:degraded to SSLv3.0
+sys   = Windows,@unix
+sig   = 3.0:ff,88,87,39,38,84,35,45,44,66,33,32,96,41,4,5,2f,16,13,feff,a::
+
 ; -------
 ; Firefox
 ; -------
