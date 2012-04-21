@@ -7,7 +7,6 @@
 
   Distributed under the terms and conditions of GNU LGPL.
 
-
 */
 
 #define _FROM_FP_SSL
@@ -35,53 +34,104 @@
 #include "fp_ssl.h"
 
 
-static struct ssl_sig_record* sigs[2];
-static u32 sig_cnt[2];
+/* Signatures are just stored as simple list. Matching is quite fast -
+   ssl version and flags must match exactly, matching ciphers and
+   extensions usually requires looking only at a first few bytes of
+   the signature. Of course - assuming the signature doesn't start
+   with a star. */
+
+static struct ssl_sig_record* signatures;
+static u32 signatures_cnt;
 
 
-static u32* load_sig(char** val_ptr) {
-  char *val = *val_ptr;
+/* Decode a string of 24 bit comma separated hex numbers into an
+   annotated u32 array. Exit with success on \0 or ':'. */
+
+static u32* decode_hex_string(char** val_ptr, u32 line_no) {
+
+  char* val = *val_ptr;
+
   u32 ciphers[128];
   u8 p = 0;
+
   while (p < 128) {
+
     u32 optional = 0;
-    if (*val == '*') {
+    char *prev_val;
+    u32* ret;
+
+    /* First state: value expected */
+
+    switch (*val) {
+
+    case '*':
       ciphers[p++] = MATCH_ANY;
       val ++;
-    } else {
-      char *pval = val;
-      if (*val == '?') {optional = MATCH_MAYBE; val ++;}
-      ciphers[p] = strtol(val, &val, 16) | optional;
-      if (val != pval) p++;
+      break;
+
+    case '?':
+      optional = MATCH_MAYBE;
+      val ++;
+      /* Must be a hex digit after question mark */
+    case 'a' ... 'f':
+    case '0' ... '9':
+      prev_val = val;
+      ciphers[p++] = (strtol(val, &val, 16) & 0xFFFFFF) | optional;
+      if (val == prev_val) return NULL;
+      break;
+
+    default:
+      return NULL;
+
     }
-    if (*val != ':' && *val != ',') return NULL;
-    if (*val == ':') break;
-    val ++; // ,
+
+    /* Second state: comma, semicolon or zero expected */
+
+    switch (*val) {
+
+    case ':':
+    case '\0':
+      *val_ptr = val;
+      ret = DFL_ck_alloc((p + 1) * sizeof(u32));
+      memcpy(ret, ciphers, p * sizeof(u32));
+      ret[p] = END_MARKER;
+      return ret;
+
+    case ',':
+      val ++;
+      break;
+
+    default:
+      return NULL;
+
+    }
+
   }
 
-  *val_ptr = val;
-  u32* ret = DFL_ck_alloc((p + 1) * sizeof(u32));
-  memcpy(ret, ciphers, p * sizeof(u32));
-  ret[p] = END_MARKER;
-  return ret;
+  FATAL("Too many ciphers or extensions in line %u.", line_no);
 
 }
 
 
+/* Register new SSL signature. */
+
 void ssl_register_sig(u8 to_srv, u8 generic, s32 sig_class, u32 sig_name,
-                       u8* sig_flavor, u32 label_id, u32* sys, u32 sys_cnt,
-                       u8* uval, u32 line_no) {
+                      u8* sig_flavor, u32 label_id, u32* sys, u32 sys_cnt,
+                      u8* uval, u32 line_no) {
 
   struct ssl_sig* ssig;
   struct ssl_sig_record* srec;
 
+  /* Client signatures only. */
+  if (to_srv != 1) return;
+
   char *val = (char*)uval;
   ssig = DFL_ck_alloc(sizeof(struct ssl_sig));
 
-  sigs[to_srv] = DFL_ck_realloc(sigs[to_srv], sizeof(struct ssl_sig_record) *
-                                (sig_cnt[to_srv] + 1));
+  signatures = DFL_ck_realloc(signatures, (signatures_cnt + 1) *
+                              sizeof(struct ssl_sig_record));
 
-  srec = &sigs[to_srv][sig_cnt[to_srv]];
+  srec = &signatures[signatures_cnt];
 
 
   int maj = strtol(val, &val, 10);
@@ -93,12 +143,12 @@ void ssl_register_sig(u8 to_srv, u8 generic, s32 sig_class, u32 sig_name,
 
   ssig->request_version = (maj << 8) | min;
 
-  ssig->cipher_suites = load_sig(&val);
-  if (!val || *val != ':' || !ssig->cipher_suites) FATAL("Malformed signature in line %u %c.", line_no, *val);
+  ssig->cipher_suites = decode_hex_string(&val, line_no);
+  if (!val || *val != ':' || !ssig->cipher_suites) FATAL("Malformed signature in line %u.", line_no);
   val ++;
 
-  ssig->extensions = load_sig(&val);
-  if (!val || *val != ':' || !ssig->extensions) FATAL("Malformed signature in line %u %c.", line_no, *val);
+  ssig->extensions = decode_hex_string(&val, line_no);
+  if (!val || *val != ':' || !ssig->extensions) FATAL("Malformed signature in line %u.", line_no);
   val ++;
 
 
@@ -156,7 +206,7 @@ void ssl_register_sig(u8 to_srv, u8 generic, s32 sig_class, u32 sig_name,
 
   srec->sig      = ssig;
 
-  sig_cnt[to_srv]++;
+  signatures_cnt++;
 
 }
 
@@ -235,9 +285,9 @@ static void ssl_find_match(u8 to_srv, struct ssl_sig* ts, u8 dupe_det) {
 
   u32 i;
 
-  for (i = 0; i < sig_cnt[to_srv]; i++) {
+  for (i = 0; i < signatures_cnt; i++) {
 
-    struct ssl_sig_record* ref = sigs[to_srv] + i;
+    struct ssl_sig_record* ref = &signatures[i];
     struct ssl_sig* rs = CP(ref->sig);
 
     /* Exact version match. */
@@ -659,7 +709,11 @@ static u8* dump_sig(struct ssl_sig *sig) {
 static void fingerprint_ssl(u8 to_srv, struct packet_flow* f, struct ssl_sig *sig) {
 
   struct ssl_sig_record* m;
-  ssl_find_match(to_srv, sig, 0);
+  if (to_srv) {
+    ssl_find_match(sig, 0);
+  } else {
+    // TODO
+  }
 
   start_observation("ssl request", 4, to_srv, f);
 
