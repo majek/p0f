@@ -210,74 +210,84 @@ void ssl_register_sig(u8 to_srv, u8 generic, s32 sig_class, u32 sig_name,
 
 }
 
+/* Is u32 list of ciphers/extensions matching the signature?
+   first argument is record (star and question mark allowed),
+   second one is an exact signature. */
 
-static int match_sigs(u32* x, u32* c) {
-  u32 *r = x;
-  u32 *c2;
+static int match_sigs(u32* rec, u32* sig) {
+
   u8 match_any = 0;
 
-  for (; *r != END_MARKER && *c != END_MARKER; r++) {
-    if (*r == *c || (*r & ~MATCH_MAYBE) == *c) {
-      /* Exact match, move on */
-      match_any = 0; c++;
+  /* Iterate over record. */
+
+  for (; *rec != END_MARKER && *sig != END_MARKER; rec++) {
+
+    /* Exact match of values, move on */
+    if (*rec == *sig || (*rec & ~MATCH_MAYBE) == *sig) {
+      match_any = 0; sig++;
       continue;
     }
 
-    if (*r == MATCH_ANY) {
-      /* Star, may match anything */
+    /* Star, may match anything */
+    if (*rec == MATCH_ANY) {
       match_any = 1;
       continue;
     }
 
-    if (*r & MATCH_MAYBE) {
-      /* Optional match */
-      if (!match_any) {
-        /* not fulfilled */
-        continue;
-      } else {
-        for (c2 = c; *c2 != END_MARKER; c2++) {
-          if (*c2 == (*r & ~MATCH_MAYBE)) {
-            /* Match */
-            c = c2 + 1;
+
+    /* Optional match */
+    if (*rec & MATCH_MAYBE) {
+      if (match_any) {
+        u32* tmp_sig;
+        /* Look forward for the value (aka: greedy). */
+        for (tmp_sig = sig; *tmp_sig != END_MARKER; tmp_sig++) {
+          if (*tmp_sig == (*rec & ~MATCH_MAYBE)) {
+            /* Got it. */
+            match_any = 0; sig = tmp_sig + 1;
             break;
           }
         }
-        /* No optional match (or match if from broken for) */
-        match_any = 0;
-        continue;
       }
+      /* Loop succeeded or optional match after star
+         failed, whatever, go on. */
+      continue;
     }
 
+    /* Match any */
     if (match_any) {
-      for (; *c != END_MARKER; c++) {
-        if (*r == *c) {
-          c++;
+      for (; *sig != END_MARKER; sig++) {
+        if (*rec == *sig) {
+          sig ++;
           break;
         }
       }
+      /* Sig is next char after match or END_MARKER */
       match_any = 0;
       continue;
     }
 
+    /* Nope, not matched. */
     return 1;
+
   }
 
-  while (*r != END_MARKER) {
-    if ((*r & MATCH_MAYBE) || *r == MATCH_ANY) {
-      r ++;
-    } else {
-      break;
-    }
-  }
+  /* Right, we're after loop, either rec or sig are set to
+     END_MARKER */
 
-  if (*r == END_MARKER && *c == END_MARKER)
+  /* Step 1. Roll rec if it has conditional matches. */
+  for (;(*rec & MATCH_MAYBE) || *rec == MATCH_ANY; rec ++) {};
+
+  /* Step 2. Both finished - hurray. */
+  if (*rec == END_MARKER && *c == END_MARKER)
     return 0;
 
-  if (*r == END_MARKER && match_any)
+  /* Step 3. Rec is done and we're in MATCH_ANY mode - hurray. */
+  if (*rec == END_MARKER && match_any)
     return 0;
 
-
+  /* Step 4. Nope. */
   return 1;
+
 }
 
 
