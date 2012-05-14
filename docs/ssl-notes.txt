@@ -1,13 +1,22 @@
 
 
 Not many people realise that the unencrypted SSL handshake
-(ClientHello message) reveals a lot of details about the client.
+(ClientHello message) reveals some details about the client.
 
-It should be possible to at least fingerprint underlying SSL
-library. With a bit of luck it might be possible to match some details
-about particular application (like browser).
+For given application using SSL it is possible to fingerprint
+underlying SSL library. In many cases, especially in the browser
+world, it is even possible to pinpoint specific application and
+release.
 
-Figuring out exact fingerprint structure is still work in progress.
+As SSL traffic is unharmed by proxies or routers, we can have high
+confidentiality that the SSL fingerprint does identify a genuine
+client. This may be very for detecting NAT's.
+
+Although initial frames sent from both SSL client and server are
+similar, only frame sent by the client - ClientHello, can be passively
+fingerprinted. The server frame - ServerHello doesn't have enough
+information. If you wish to fingerprint SSL servers - an active
+fingerprinting tool would be more suitable.
 
 
 Fingerprinting SSL is not a new idea, initial work was done in mid
@@ -20,77 +29,56 @@ He was able to collect few dozen interesting signatures:
  * http://blog.ivanristic.com/2009/07/examples-of-the-information-collected-from-ssl-handshakes.html
 
 Though, in his works he seem to have ignored the SSL extensions field,
-which might be very important factor in generating reliable
-fingerprints. Especially extensions ordering may have high value,
-similarly to TCP options ordering for TCP/IP stack fingerprinting.
+which add valuable information to a fingerprint. Especially the
+ordering of extensions has high value, similarly to the TCP options
+ordering for TCP/IP stack fingerprinting.
 
 
 SSL handshake (ClientHello message) contains following fields:
 
- * Handshake version - browsers usually use version 3, Ivan Ristić
-   showed that web crawlers (including wget) still use 2.
+ * SSL handshake version - browsers usually use version 3, Ivan Ristić
+   research shows that web crawlers (including wget) still use 2.
+   We set a flag:
+     'v2'  - if request is SSL version 2
 
  * Requested protocol version - most likely 3.1. Less likely values
-   are 3.0 and 3.2.
+   are 3.0 and 3.2. SSL crawlers trying invalid versions like 4.2 were
+   seen in the wild. ('request_version')
+   We set a flag:
+     'ver' - if, for SSL version 3, the version on a 'request' block
+             is different than on 'record' block. This behaviour was seen
+             only in Opera.
 
- * gmt_unix_time - which can be used to get current time on the client
-   machine. Adding this information to knowledge gathered from the TCP
-   timestamp could become a very valuable factor in detecting NATs.
+ * gmt_unix_time - a timestamp from the client. Adding this
+   information to knowledge gathered from the TCP timestamp could
+   become a valuable factor in detecting NATs. In the code we may
+   set two flags from this value:
+     'stime' - when the timestamp is unnaturally small (less than one year 
+               since the epoch). This is behaviour was seen in old Firefox
+               releases, when gmt_unix_time is set to seconds since boot.
+     'time' - when the timestamp is far off the current value (delta
+              is bigger than 5 years). Most often this means that gmt_unix_time
+              field is set to a random value. This was seen in some
+              SSL crawlers.
 
- * 28 random bytes - ignored by now. Detailed analysis of PRNG might
-   reveal something interesting, similarly to:
-     http://lcamtuf.coredump.cx/oldtcp/tcpseq.html
+ * 28 random bytes - not very useful. We set a flag:
+      'rand' - when the random value doesn't look random and
+               a word 0x0000 or 0xffff was detected.
 
- * session_id - a client may choose to resume previous SSL session.
-   This field can be used to match this browser session with previous
-   activities, which has an impact on user privacy, but it is probably
-   too high level for p0f.
+ * session_id - a client may choose to resume previous SSL session. Ignored.
 
- * cipher_suites - a list of supported encryption algorithms. Both
-   specific algorithms and their order seem to be application
-   specific.
+ * cipher_suites - a list of supported encryption algorithms ('cipher_suites')
 
- * compression_methods - a list of supported compression
-   methods.
+ * compression_methods - a list of supported compression methods. There
+   is only one valid compression method available, so we set a flag:
+       'compr' - if compression is enabled 
 
- * extensions - a list of extensions. Second, after cipher_suites,
-   major source of data.
-
-
-Similar frame is reported by the SSL server to the client, but it
-contains less information - single cipher_suite instead of a
-list. Also, the response is dependent on the request which makes it
-not a very good material for passive fingerprinting. On the other
-hand, some fields (like gmt_unix_time) may still be valuable.
-
-
-References:
-
- * http://tools.ietf.org/html/rfc5246
- * http://www.iana.org/assignments/tls-extensiontype-values/tls-extensiontype-values.xml
+ * extensions - a list of SSL extensions. Second, after cipher_suites,
+   major source of data. ('extensions')
 
 
-Fingerprinting extensions:
-
-Most of the extensions don't carry any interesting data.
-
-
-    170 a/000400170018
-   3592 a/0006001700180019
-    178 a/0032000100020003000400050006000700080009000a000b000c000d000e000f0010001100120013001400150016001700180019
-
-   3770 b/0100
-    170 b/03000102
-
-     11 d/00080401020101010202
-      3 d/00080402040102010202
-      4 d/000a05010401020104030203
-      2 d/000e0401050102010403050302030202
-     89 d/00140601050104010301020106030503040303030203
-
-
-
-http://blogs.technet.com/b/steriley/archive/2007/11/06/changing-the-ssl-cipher-order-in-internet-explorer-7-on-windows-vista.aspx
-
-
-Test without domain name.... - just IP address
+It's worth noting that SSL extensions contain not only a list of
+supported extensions but also optional payload for every extension.
+Currently, we ignore the payload as the experiments shown that it
+isn't an interesting source of data - we can squeeze the same
+entropy by just looking at the ordering of SSL extensions.
