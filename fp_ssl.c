@@ -262,14 +262,13 @@ static int match_sigs(u32* rec, u32* sig) {
 
   }
 
-  /* Right, we're after loop, either rec or sig are set to
-     END_MARKER */
+  /* Right, we're after loop, either rec or sig are set to END_MARKER */
 
-  /* Step 1. Roll rec if it has conditional matches. */
+  /* Step 1. Roll rec until it has conditional matches. */
   for (;(*rec & MATCH_MAYBE) || *rec == MATCH_ANY; rec ++) {};
 
   /* Step 2. Both finished - hurray. */
-  if (*rec == END_MARKER && *c == END_MARKER)
+  if (*rec == END_MARKER && *sig == END_MARKER)
     return 0;
 
   /* Step 3. Rec is done and we're in MATCH_ANY mode - hurray. */
@@ -282,7 +281,8 @@ static int match_sigs(u32* rec, u32* sig) {
 }
 
 
-static void ssl_find_match(u8 to_srv, struct ssl_sig* ts, u8 dupe_det) {
+/* TODO: dupe_det?  */
+static void ssl_find_match(struct ssl_sig* ts, u8 dupe_det) {
 
   u32 i;
 
@@ -294,7 +294,7 @@ static void ssl_find_match(u8 to_srv, struct ssl_sig* ts, u8 dupe_det) {
     /* Exact version match. */
     if (rs->request_version != ts->request_version) continue;
 
-    /* At least flags from the record. */
+    /* At least flags from the record. TODO: move to exact match. */
     if ((rs->flags & ts->flags) != rs->flags) continue;
 
     /* Extensions match. */

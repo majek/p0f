@@ -77,8 +77,9 @@ struct ssl_sig {
 #define SSL_FLAG_V2    0x0002  /* SSLv2 handshake. */
 #define SSL_FLAG_VER   0x0004  /* Record version different than ClientHello. */
 #define SSL_FLAG_RAND  0x0008  /* 0xffff or 0x0000 detected in random. */
-#define SSL_FLAG_TIME  0x0010  /* weird SSL time */
-#define SSL_FLAG_STIME 0x0020  /* small SSL time, since the reboot of vm for old ff */
+#define SSL_FLAG_TIME  0x0010  /* weird SSL time, (delta > 5 years), most likely random*/
+#define SSL_FLAG_STIME 0x0020  /* small SSL time, (absolute value < 1 year)
+                                  most likely time since reboot for old ff */
 
 struct ssl_sig_record {
 
