@@ -135,10 +135,10 @@ void ssl_register_sig(u8 to_srv, u8 generic, s32 sig_class, u32 sig_name,
 
 
   int maj = strtol(val, &val, 10);
-  if (!val || *val != '.')  FATAL("Malformed signature in line %u.", line_no);
+  if (!val || *val != '.') FATAL("Malformed signature in line %u.", line_no);
   val ++;
   int min = strtol(val, &val, 10);
-  if (!val || *val != ':')  FATAL("Malformed signature in line %u.", line_no);
+  if (!val || *val != ':') FATAL("Malformed signature in line %u.", line_no);
   val ++;
 
   ssig->request_version = (maj << 8) | min;
@@ -194,7 +194,6 @@ void ssl_register_sig(u8 to_srv, u8 generic, s32 sig_class, u32 sig_name,
 
   }
 
-
   srec->class_id = sig_class;
   srec->name_id  = sig_name;
   srec->flavor   = sig_flavor;
@@ -209,6 +208,7 @@ void ssl_register_sig(u8 to_srv, u8 generic, s32 sig_class, u32 sig_name,
   signatures_cnt++;
 
 }
+
 
 /* Is u32 list of ciphers/extensions matching the signature?
    first argument is record (star and question mark allowed),
@@ -707,9 +707,6 @@ static u8* dump_sig(struct ssl_sig *sig) {
     RETF("%sstime", had_prev ? "," : "");
     had_prev = 1;
   }
-
-
-  /* RETF(":%x", sig->remote_time); */
 
   return ret;
 
