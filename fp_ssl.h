@@ -58,7 +58,6 @@ struct ssl_sig_record;
 
 struct ssl_sig {
 
-  u16 record_version;           /* TLS version used on the record layer.  */
   u16 request_version;          /* Requested SSL version (maj << 8) | min */
 
   u32 remote_time;              /* ClientHello message gmt_unix_time field */

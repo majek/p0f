@@ -396,7 +396,7 @@ abort_message:
  message.  -1 on parsing error, 1 if signature was extracted. */
 
 static int fingerprint_ssl_v3(struct ssl_sig *sig, const u8 *fragment,
-                              u32 frag_len, u32 local_time) {
+                              u32 frag_len, u16 record_version, u32 local_time) {
 
   int i;
   const u8 *record = fragment;
@@ -452,7 +452,7 @@ static int fingerprint_ssl_v3(struct ssl_sig *sig, const u8 *fragment,
 
   sig->request_version = (pay[0] << 8) | pay[1];
 
-  if (sig->request_version != sig->record_version) {
+  if (sig->request_version != record_version) {
     sig->flags |= SSL_FLAG_VER;
   }
 
@@ -791,7 +791,6 @@ u8 process_ssl(u8 to_srv, struct packet_flow *f) {
     if (f->req_len < 2 + msg_length) return can_get_more;
 
     memset(&sig, 0, sizeof(struct ssl_sig));
-    sig.record_version = 0x0200;
     sig.flags |= SSL_FLAG_V2;
 
     success = fingerprint_ssl_v2(&sig, f->request, msg_length + 2);
@@ -813,11 +812,12 @@ u8 process_ssl(u8 to_srv, struct packet_flow *f) {
       return can_get_more;
 
     memset(&sig, 0, sizeof(struct ssl_sig));
-    sig.record_version = (hdr3->ver_maj << 8) | hdr3->ver_min;
+    u16 record_version = (hdr3->ver_maj << 8) | hdr3->ver_min;
 
     u8 *fragment = f->request + sizeof(struct ssl3_record_hdr);
 
     success = fingerprint_ssl_v3(&sig, fragment, fragment_len,
+                                 record_version,
                                  f->client->last_seen);
 
   }
