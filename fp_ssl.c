@@ -33,6 +33,18 @@
 
 #include "fp_ssl.h"
 
+/* flags */
+struct flag {
+  char* name;
+  u32 value;
+} flags[] = {{"compr", SSL_FLAG_COMPR},
+             {"v2", SSL_FLAG_V2},
+             {"ver", SSL_FLAG_VER},
+             {"rand", SSL_FLAG_RAND},
+             {"time", SSL_FLAG_TIME},
+             {"stime", SSL_FLAG_STIME},
+             {NULL, 0}};
+
 
 /* Signatures are just stored as simple list. Matching is quite fast -
    ssl version and flags must match exactly, matching ciphers and
@@ -153,42 +165,22 @@ void ssl_register_sig(u8 to_srv, u8 generic, s32 sig_class, u32 sig_name,
 
 
   while (*val) {
+    struct flag *flag;
+    for (flag = &flags[0]; flag->name != NULL; flag ++) {
 
-    if (!strncmp((char*)val, "compr", 5)) {
+      int len = strlen(flag->name);
+      if (!strncmp((char*)val, flag->name, len)) {
 
-      ssig->flags |= SSL_FLAG_COMPR;
-      val += 5;
+        ssig->flags |= flag->value;
+        val += len;
+        goto flag_matched;
 
-    } else if (!strncmp((char*)val, "v2", 2)) {
-
-      ssig->flags |= SSL_FLAG_V2;
-      val += 2;
-
-    } else if (!strncmp((char*)val, "ver", 3)) {
-
-      ssig->flags |= SSL_FLAG_VER;
-      val += 3;
-
-    } else if (!strncmp((char*)val, "rand", 4)) {
-
-      ssig->flags |= SSL_FLAG_RAND;
-      val += 4;
-
-    } else if (!strncmp((char*)val, "time", 4)) {
-
-      ssig->flags |= SSL_FLAG_TIME;
-      val += 4;
-
-    } else if (!strncmp((char*)val, "stime", 5)) {
-
-      ssig->flags |= SSL_FLAG_STIME;
-      val += 5;
-
-    } else {
-
-      FATAL("Unrecognized flag in line %u.", line_no);
-
+      }
     }
+
+    FATAL("Unrecognized flag in line %u.", line_no);
+
+  flag_matched:
 
     if (*val == ',') val++;
 
@@ -233,7 +225,6 @@ static int match_sigs(u32* rec, u32* sig) {
       match_any = 1;
       continue;
     }
-
 
     /* Optional match */
     if (*rec & MATCH_MAYBE) {
