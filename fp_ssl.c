@@ -678,34 +678,14 @@ static u8* dump_sig(struct ssl_sig *sig) {
   RETF(":");
   had_prev = 0;
 
-  if (sig->flags & SSL_FLAG_COMPR) {
-    RETF("%scompr", had_prev ? "," : "");
-    had_prev = 1;
-  }
+  struct flag *flag;
+  for (flag = &flags[0]; flag->name != NULL; flag ++) {
 
-  if (sig->flags & SSL_FLAG_V2) {
-    RETF("%sv2", had_prev ? "," : "");
-    had_prev = 1;
-  }
+    if (sig->flags & flag->value) {
+      RETF("%s%s", had_prev ? "," : "", flag->name);
+      had_prev = 1;
+    }
 
-  if (sig->flags & SSL_FLAG_VER) {
-    RETF("%sver", had_prev ? "," : "");
-    had_prev = 1;
-  }
-
-  if (sig->flags & SSL_FLAG_RAND) {
-    RETF("%srand", had_prev ? "," : "");
-    had_prev = 1;
-  }
-
-  if (sig->flags & SSL_FLAG_TIME) {
-    RETF("%stime", had_prev ? "," : "");
-    had_prev = 1;
-  }
-
-  if (sig->flags & SSL_FLAG_STIME) {
-    RETF("%sstime", had_prev ? "," : "");
-    had_prev = 1;
   }
 
   return ret;
