@@ -42,7 +42,6 @@ struct flag {
 struct flag flags[] = {{"compr", SSL_FLAG_COMPR},
                        {"v2",    SSL_FLAG_V2},
                        {"ver",   SSL_FLAG_VER},
-                       {"rand",  SSL_FLAG_RAND},
                        {"time",  SSL_FLAG_TIME},
                        {"stime", SSL_FLAG_STIME},
                        {NULL, 0}};
@@ -140,19 +139,19 @@ static int match_sigs(u32* rec, u32* sig) {
 
   for (; *rec != END_MARKER && *sig != END_MARKER; rec++) {
 
-    /* Exact match, move on */
+    /* 1. Exact match, move on */
     if ((*rec & ~MATCH_MAYBE) == *sig) {
       match_any = 0; sig++;
       continue;
     }
 
-    /* Star, may match anything */
+    /* 2. Star, may match anything */
     if (*rec == MATCH_ANY) {
       match_any = 1;
       continue;
     }
 
-    /* Optional match, not yet fulfilled */
+    /* 3. Optional match, not yet fulfilled */
     if (*rec & MATCH_MAYBE) {
       if (match_any) {
         /* Look forward for the value (aka: greedy match). */
@@ -168,7 +167,7 @@ static int match_sigs(u32* rec, u32* sig) {
       continue;
     }
 
-    /* Looking for an exact match after MATCH_ANY */
+    /* 4. Looking for an exact match after MATCH_ANY */
     if (match_any) {
       for (; *sig != END_MARKER; sig++) {
         if (*rec == *sig) {
@@ -181,7 +180,7 @@ static int match_sigs(u32* rec, u32* sig) {
       continue;
     }
 
-    /* Nope, not matched. */
+    /* 5. Nope, not matched. */
     return 1;
 
   }
@@ -207,8 +206,7 @@ static int match_sigs(u32* rec, u32* sig) {
 
 
 
-/* TODO: dupe_det?  */
-static void ssl_find_match(struct ssl_sig* ts, u8 dupe_det) {
+static void ssl_find_match(struct ssl_sig* ts) {
 
   u32 i;
 
@@ -217,19 +215,17 @@ static void ssl_find_match(struct ssl_sig* ts, u8 dupe_det) {
     struct ssl_sig_record* ref = &signatures[i];
     struct ssl_sig* rs = CP(ref->sig);
 
-    /* Exact version match. */
+    /* SSL versions must match exactly. */
     if (rs->request_version != ts->request_version) continue;
 
-    /* At least flags from the record. TODO: move to exact match. */
-    if ((rs->flags & ts->flags) != rs->flags) continue;
+    /* Flags - exact match */
+    if (ts->flags != rs->flags) continue;
 
     /* Extensions match. */
-    int extensions_match = match_sigs(rs->extensions, ts->extensions);
-    if (extensions_match != 0) continue;
+    if (match_sigs(rs->extensions, ts->extensions) != 0) continue;
 
     /* Cipher suites match. */
-    int suites_match = match_sigs(rs->cipher_suites, ts->cipher_suites);
-    if (suites_match != 0) continue;
+    if (match_sigs(rs->cipher_suites, ts->cipher_suites) != 0) continue;
 
     ts->matched = ref;
     return;
@@ -247,18 +243,19 @@ static int fingerprint_ssl_v2(struct ssl_sig *sig, const u8 *pay, u32 pay_len) {
   const u8 *pay_end = pay + pay_len;
   const u8 *tmp_end;
 
-  if (pay + sizeof(struct ssl2_hdr) > pay_end) goto abort_message;
+  if (pay + sizeof(struct ssl2_hdr) > pay_end) goto too_short;
 
   struct ssl2_hdr *hdr = (struct ssl2_hdr*)pay;
   pay += sizeof(struct ssl2_hdr);
 
-  /* SSLv2 has version 0x0002 on the wire. */
   if (hdr->ver_min == 2 && hdr->ver_maj == 0) {
 
+    /* SSLv2 is actually 0x0002 on the wire. */
     sig->request_version = 0x0200;
 
   } else {
 
+    /* Most often - SSLv2 header has request version set to 3.x */
     sig->request_version = (hdr->ver_maj << 8) | hdr->ver_min;
 
   }
@@ -274,7 +271,7 @@ static int fingerprint_ssl_v2(struct ssl_sig *sig, const u8 *pay, u32 pay_len) {
 
   }
 
-  if (pay + cipher_spec_len > pay_end) goto abort_message;
+  if (pay + cipher_spec_len > pay_end) goto too_short;
 
   int cipher_pos = 0;
   sig->cipher_suites = ck_alloc(((cipher_spec_len / 3) + 1) * sizeof(u32));
@@ -293,7 +290,13 @@ static int fingerprint_ssl_v2(struct ssl_sig *sig, const u8 *pay, u32 pay_len) {
   u16 session_id_len = ntohs(hdr->session_id_length);
   u16 challenge_len = ntohs(hdr->challenge_length);
 
-  if (pay + session_id_len + challenge_len > pay_end) goto stop;
+  if (pay + session_id_len + challenge_len > pay_end) {
+
+    DEBUG("[#] SSLv2 frame truncated (but valid)");
+    goto stop;
+
+  }
+
   pay += session_id_len + challenge_len;
 
   if (pay != pay_end) {
@@ -306,13 +309,15 @@ static int fingerprint_ssl_v2(struct ssl_sig *sig, const u8 *pay, u32 pay_len) {
 
 stop:
 
-  sig->extensions    = ck_alloc(1 * sizeof(u32));
+  sig->extensions = ck_alloc(1 * sizeof(u32));
   sig->extensions[0] = END_MARKER;
 
   return 1;
 
 
-abort_message:
+too_short:
+
+  DEBUG("[#] SSLv2 frame too short");
 
   ck_free(sig->cipher_suites);
   ck_free(sig->extensions);
@@ -329,29 +334,25 @@ static int fingerprint_ssl_v3(struct ssl_sig *sig, const u8 *fragment,
                               u32 frag_len, u16 record_version, u32 local_time) {
 
   int i;
-  const u8 *record = fragment;
   const u8 *frag_end = fragment + frag_len;
 
-  struct ssl_message_hdr *msg = (struct ssl_message_hdr*)record;
+  struct ssl3_message_hdr *msg = (struct ssl3_message_hdr*)fragment;
   u32 msg_len = (msg->length[0] << 16) |
                 (msg->length[1] << 8) |
                 (msg->length[2]);
 
-  const u8 *pay = (const u8*)msg + sizeof(struct ssl_message_hdr);
+  const u8 *pay = (const u8*)msg + sizeof(struct ssl3_message_hdr);
   const u8 *pay_end = pay + msg_len;
   const u8 *tmp_end;
 
-  /* Roll on pointer to next record. */
 
-  record += msg_len + sizeof(struct ssl_message_hdr);
+  /* Record size goes beyond current fragment, it's fine by SSL but
+     not for us. */
 
-
-  /* Record size goes beyond current fragment - that's fine by SSL */
-
-  if (record > frag_end) {
+  if (pay_end > frag_end) {
 
     DEBUG("[#] SSL Fragment coalescing not supported - %u bytes requested.\n",
-          record - frag_end);
+          pay_end - frag_end);
 
     return -1;
 
@@ -363,7 +364,7 @@ static int fingerprint_ssl_v3(struct ssl_sig *sig, const u8 *fragment,
          below in the order they MUST be sent; sending handshake
          messages in an unexpected order results in a fatal error.
 
-       I guess we can assume that the first frame is ClientHello.
+       I guess we can assume that the first frame must be ClientHello.
     */
 
     DEBUG("[#] SSL First message type 0x%02x (%u bytes) not supported.\n",
@@ -378,25 +379,28 @@ static int fingerprint_ssl_v3(struct ssl_sig *sig, const u8 *fragment,
 
   /* Header (34B) + session_id_len (1B) */
 
-  if (pay + 2 + 4 + 28 + 1 > pay_end) goto abort_message;
+  if (pay + 2 + 4 + 28 + 1 > pay_end) goto too_short;
 
   sig->request_version = (pay[0] << 8) | pay[1];
+  pay += 2;
 
   if (sig->request_version != record_version) {
     sig->flags |= SSL_FLAG_VER;
   }
 
-  sig->remote_time = ntohl(*((u32*)&pay[2]));
+  sig->remote_time = ntohl(*((u32*)pay));
+  pay += 4;
+
   sig->drift       = local_time - sig->remote_time;
 
   if (sig->remote_time < 1*365*24*60*60) {
 
-    /* Old Firefox on windows uses */
+    /* Old Firefox on windows uses time since boot */
     sig->flags |= SSL_FLAG_STIME;
 
   } else if (abs(sig->drift) > 5*365*24*60*60) {
 
-    /* More than 5 years difference */
+    /* More than 5 years difference - most likely random */
     sig->flags |= SSL_FLAG_TIME;
 
     DEBUG("[#] SSL timer looks wrong: drift=%i remote_time=%08x\n",
@@ -404,17 +408,17 @@ static int fingerprint_ssl_v3(struct ssl_sig *sig, const u8 *fragment,
 
   }
 
-
-  pay += 6;
-
-
   /* Random */
   u16 *random = (u16*)pay;
   pay += 28;
 
   for (i=0; i<14; i++) {
     if (random[i] == 0x0000 || random[i] == 0xffff) {
-      sig->flags |= SSL_FLAG_RAND;
+
+      DEBUG("[#] SSL 0x%04x found in allegedly random blob at offset %i",
+            random[i], i);
+      break;
+
     }
   }
 
@@ -422,7 +426,7 @@ static int fingerprint_ssl_v3(struct ssl_sig *sig, const u8 *fragment,
   u8 session_id_len = pay[0];
   pay += 1;
 
-  if (pay + session_id_len + 2 > pay_end) goto abort_message;
+  if (pay + session_id_len + 2 > pay_end) goto too_short;
 
   pay += session_id_len;
 
@@ -435,12 +439,11 @@ static int fingerprint_ssl_v3(struct ssl_sig *sig, const u8 *fragment,
   if (cipher_suites_len % 2) {
 
     DEBUG("[#] SSL cipher_suites_len=%u is not even.\n", cipher_suites_len);
-    goto abort_message;
+    return -1;
 
   }
 
-  if (pay + cipher_suites_len > pay_end)
-    goto abort_message;
+  if (pay + cipher_suites_len > pay_end) goto too_short;
 
   int cipher_pos = 0;
   sig->cipher_suites = ck_alloc(((cipher_suites_len / 2) + 1) * sizeof(u32));
@@ -454,12 +457,12 @@ static int fingerprint_ssl_v3(struct ssl_sig *sig, const u8 *fragment,
   }
   sig->cipher_suites[cipher_pos] = END_MARKER;
 
-  if (pay + 1 > pay_end ) goto stop;
+  if (pay + 1 > pay_end) goto truncated;
 
   u8 compression_methods_len = pay[0];
   pay += 1;
 
-  if (pay + compression_methods_len > pay_end ) goto stop;
+  if (pay + compression_methods_len > pay_end) goto truncated;
 
   tmp_end = pay + compression_methods_len;
 
@@ -473,12 +476,12 @@ static int fingerprint_ssl_v3(struct ssl_sig *sig, const u8 *fragment,
 
   }
 
-  if (pay + 2 > pay_end) goto stop;
+  if (pay + 2 > pay_end) goto truncated;
 
   u16 extensions_len = (pay[0] << 8) | pay[1];
   pay += 2;
 
-  if (pay + extensions_len > pay_end) goto stop;
+  if (pay + extensions_len > pay_end) goto truncated;
 
   int extensions_pos = 0;
   sig->extensions = ck_alloc(((extensions_len / 4) + 1) * sizeof(u32));
@@ -512,10 +515,8 @@ static int fingerprint_ssl_v3(struct ssl_sig *sig, const u8 *fragment,
 
     DEBUG("[#] SSL malformed extensions, %i bytes over.\n",
           pay - tmp_end);
-    goto stop;
 
   }
-
 
   if (pay != pay_end) {
 
@@ -524,14 +525,19 @@ static int fingerprint_ssl_v3(struct ssl_sig *sig, const u8 *fragment,
 
   }
 
-  if (record != frag_end) {
+  if (pay_end != frag_end) {
 
     DEBUG("[#] SSL %i bytes remaining after ClientHello message.\n",
-          frag_end - record);
+          frag_end - pay_end);
 
   }
 
-stop:
+  if (0) {
+truncated:
+
+    DEBUG("[#] SSL packet truncated (but valid)");
+
+  }
 
   if (!sig->extensions) {
     sig->extensions    = ck_alloc(1*sizeof(u32));
@@ -541,9 +547,9 @@ stop:
   return 1;
 
 
-abort_message:
+too_short:
 
-  DEBUG("[#] SSL Packet malformed.\n");
+  DEBUG("[#] SSL packet truncated.\n");
 
   ck_free(sig->cipher_suites);
   ck_free(sig->extensions);
@@ -695,7 +701,7 @@ static void fingerprint_ssl(u8 to_srv, struct packet_flow* f, struct ssl_sig *si
 
   struct ssl_sig_record* m;
   if (to_srv) {
-    ssl_find_match(sig, 0);
+    ssl_find_match(sig);
   } else {
     // TODO
   }
@@ -727,8 +733,9 @@ static void fingerprint_ssl(u8 to_srv, struct packet_flow* f, struct ssl_sig *si
 }
 
 
-/* Examine request or response; returns 1 if more data needed and plausibly can
-   be read. Note that the buffer is always NUL-terminated. */
+/* Examine request or response; returns 1 if more data needed and
+   plausibly can be read. Note that the buffer is always NULL
+   terminated. */
 
 u8 process_ssl(u8 to_srv, struct packet_flow *f) {
 
