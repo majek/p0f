@@ -61,7 +61,7 @@ struct ssl_sig {
   u16 request_version;          /* Requested SSL version (maj << 8) | min */
 
   u32 remote_time;              /* ClientHello message gmt_unix_time field */
-  u32 local_time;               /* Receive time. */
+  s32 drift;                    /* Local time - remote time */
 
   u32 *cipher_suites;
 

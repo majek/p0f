@@ -33,7 +33,7 @@
 
 #include "fp_ssl.h"
 
-/* flags */
+/* Flags for SSL signaturs */
 struct flag {
   char* name;
   u32 value;
@@ -48,8 +48,8 @@ struct flag flags[] = {{"compr", SSL_FLAG_COMPR},
                        {NULL, 0}};
 
 
-/* Signatures are stored as simple list. Matching is quite fast - ssl
-   version and flags must match exactly, matching ciphers and
+/* Signatures are stored as flat list. Matching should be rather fast:
+   ssl version and flags must match exactly, matching ciphers and
    extensions usually require looking only at a first few bytes of the
    signature. Of course - assuming the signature doesn't start with a
    star. */
@@ -204,7 +204,6 @@ static int match_sigs(u32* rec, u32* sig) {
   return 1;
 
 }
-
 
 
 
@@ -388,21 +387,20 @@ static int fingerprint_ssl_v3(struct ssl_sig *sig, const u8 *fragment,
   }
 
   sig->remote_time = ntohl(*((u32*)&pay[2]));
-  sig->local_time  = local_time;
-  s32 delta = abs((s32)(sig->local_time - sig->remote_time));
+  sig->drift       = local_time - sig->remote_time;
 
   if (sig->remote_time < 1*365*24*60*60) {
 
     /* Old Firefox on windows uses */
     sig->flags |= SSL_FLAG_STIME;
 
-  } else if (delta > 5*365*24*60*60) {
+  } else if (abs(sig->drift) > 5*365*24*60*60) {
 
-    /* More than 5 years difference? */
+    /* More than 5 years difference */
     sig->flags |= SSL_FLAG_TIME;
 
-    DEBUG("[#] SSL timer looks wrong: delta=%i remote_time=%08x\n",
-          delta, sig->remote_time);
+    DEBUG("[#] SSL timer looks wrong: drift=%i remote_time=%08x\n",
+          drift, sig->remote_time);
 
   }
 
@@ -555,7 +553,6 @@ abort_message:
 }
 
 
-
 /* Register new SSL signature. */
 
 void ssl_register_sig(u8 to_srv, u8 generic, s32 sig_class, u32 sig_name,
@@ -587,11 +584,13 @@ void ssl_register_sig(u8 to_srv, u8 generic, s32 sig_class, u32 sig_name,
   ssig->request_version = (maj << 8) | min;
 
   ssig->cipher_suites = decode_hex_string(&val, line_no);
-  if (!val || *val != ':' || !ssig->cipher_suites) FATAL("Malformed signature in line %u.", line_no);
+  if (!val || *val != ':' || !ssig->cipher_suites)
+    FATAL("Malformed signature in line %u.", line_no);
   val ++;
 
   ssig->extensions = decode_hex_string(&val, line_no);
-  if (!val || *val != ':' || !ssig->extensions) FATAL("Malformed signature in line %u.", line_no);
+  if (!val || *val != ':' || !ssig->extensions)
+    FATAL("Malformed signature in line %u.", line_no);
   val ++;
 
 
@@ -640,15 +639,14 @@ static u8* dump_sig(struct ssl_sig *sig) {
   static u8* ret;
   u32 rlen = 0;
 
-#define RETF(_par...) do { \
-    s32 _len = snprintf(NULL, 0, _par); \
+#define RETF(_par...) do {                           \
+    s32 _len = snprintf(NULL, 0, _par);              \
     if (_len < 0) FATAL("Whoa, snprintf() fails?!"); \
-    ret = DFL_ck_realloc_kb(ret, rlen + _len + 1); \
-    snprintf((char*)ret + rlen, _len + 1, _par); \
-    rlen += _len; \
+    ret = DFL_ck_realloc_kb(ret, rlen + _len + 1);   \
+    snprintf((char*)ret + rlen, _len + 1, _par);     \
+    rlen += _len;                                    \
   } while (0)
 
-  /* RETF("%u:", sig->local_time); */
   RETF("%i.%i:", sig->request_version >> 8, sig->request_version & 0xFF);
 
   for (i=0; sig->cipher_suites[i] != END_MARKER; i++) {
@@ -718,7 +716,7 @@ static void fingerprint_ssl(u8 to_srv, struct packet_flow* f, struct ssl_sig *si
 
   if ((sig->flags & (SSL_FLAG_TIME | SSL_FLAG_STIME)) == 0) {
 
-    OBSERVF("drift", "%i", abs(sig->remote_time - sig->local_time));
+    OBSERVF("drift", "%i", abs(sig->drift));
 
   } else add_observation_field("drift", NULL);
 
