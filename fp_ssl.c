@@ -37,33 +37,35 @@
 struct flag {
   char* name;
   u32 value;
-} flags[] = {{"compr", SSL_FLAG_COMPR},
-             {"v2", SSL_FLAG_V2},
-             {"ver", SSL_FLAG_VER},
-             {"rand", SSL_FLAG_RAND},
-             {"time", SSL_FLAG_TIME},
-             {"stime", SSL_FLAG_STIME},
-             {NULL, 0}};
+};
+
+struct flag flags[] = {{"compr", SSL_FLAG_COMPR},
+                       {"v2",    SSL_FLAG_V2},
+                       {"ver",   SSL_FLAG_VER},
+                       {"rand",  SSL_FLAG_RAND},
+                       {"time",  SSL_FLAG_TIME},
+                       {"stime", SSL_FLAG_STIME},
+                       {NULL, 0}};
 
 
-/* Signatures are just stored as simple list. Matching is quite fast -
-   ssl version and flags must match exactly, matching ciphers and
-   extensions usually requires looking only at a first few bytes of
-   the signature. Of course - assuming the signature doesn't start
-   with a star. */
+/* Signatures are stored as simple list. Matching is quite fast - ssl
+   version and flags must match exactly, matching ciphers and
+   extensions usually require looking only at a first few bytes of the
+   signature. Of course - assuming the signature doesn't start with a
+   star. */
 
 static struct ssl_sig_record* signatures;
 static u32 signatures_cnt;
 
 
-/* Decode a string of 24 bit comma separated hex numbers into an
-   annotated u32 array. Exit with success on \0 or ':'. */
+/* Decode a string of comma separated hex numbers into an annotated
+   u32 array. Exit with success on '\0' or ':'. */
 
 static u32* decode_hex_string(char** val_ptr, u32 line_no) {
 
   char* val = *val_ptr;
 
-  u32 ciphers[128];
+  u32 rec[128];
   u8 p = 0;
 
   while (p < 128) {
@@ -72,12 +74,12 @@ static u32* decode_hex_string(char** val_ptr, u32 line_no) {
     char *prev_val;
     u32* ret;
 
-    /* First state: value expected */
+    /* State #1: expecting value */
 
     switch (*val) {
 
     case '*':
-      ciphers[p++] = MATCH_ANY;
+      rec[p++] = MATCH_ANY;
       val ++;
       break;
 
@@ -88,7 +90,7 @@ static u32* decode_hex_string(char** val_ptr, u32 line_no) {
     case 'a' ... 'f':
     case '0' ... '9':
       prev_val = val;
-      ciphers[p++] = (strtol(val, &val, 16) & 0xFFFFFF) | optional;
+      rec[p++] = (strtol(val, &val, 16) & 0xFFFFFF) | optional;
       if (val == prev_val) return NULL;
       break;
 
@@ -97,7 +99,7 @@ static u32* decode_hex_string(char** val_ptr, u32 line_no) {
 
     }
 
-    /* Second state: comma, semicolon or zero expected */
+    /* State #2: comma, expecting '\0' or ':' */
 
     switch (*val) {
 
@@ -105,7 +107,7 @@ static u32* decode_hex_string(char** val_ptr, u32 line_no) {
     case '\0':
       *val_ptr = val;
       ret = DFL_ck_alloc((p + 1) * sizeof(u32));
-      memcpy(ret, ciphers, p * sizeof(u32));
+      memcpy(ret, rec, p * sizeof(u32));
       ret[p] = END_MARKER;
       return ret;
 
@@ -125,83 +127,6 @@ static u32* decode_hex_string(char** val_ptr, u32 line_no) {
 }
 
 
-/* Register new SSL signature. */
-
-void ssl_register_sig(u8 to_srv, u8 generic, s32 sig_class, u32 sig_name,
-                      u8* sig_flavor, u32 label_id, u32* sys, u32 sys_cnt,
-                      u8* uval, u32 line_no) {
-
-  struct ssl_sig* ssig;
-  struct ssl_sig_record* srec;
-
-  /* Client signatures only. */
-  if (to_srv != 1) return;
-
-  char *val = (char*)uval;
-  ssig = DFL_ck_alloc(sizeof(struct ssl_sig));
-
-  signatures = DFL_ck_realloc(signatures, (signatures_cnt + 1) *
-                              sizeof(struct ssl_sig_record));
-
-  srec = &signatures[signatures_cnt];
-
-
-  int maj = strtol(val, &val, 10);
-  if (!val || *val != '.') FATAL("Malformed signature in line %u.", line_no);
-  val ++;
-  int min = strtol(val, &val, 10);
-  if (!val || *val != ':') FATAL("Malformed signature in line %u.", line_no);
-  val ++;
-
-  ssig->request_version = (maj << 8) | min;
-
-  ssig->cipher_suites = decode_hex_string(&val, line_no);
-  if (!val || *val != ':' || !ssig->cipher_suites) FATAL("Malformed signature in line %u.", line_no);
-  val ++;
-
-  ssig->extensions = decode_hex_string(&val, line_no);
-  if (!val || *val != ':' || !ssig->extensions) FATAL("Malformed signature in line %u.", line_no);
-  val ++;
-
-
-  while (*val) {
-    struct flag *flag;
-    for (flag = &flags[0]; flag->name != NULL; flag ++) {
-
-      int len = strlen(flag->name);
-      if (!strncmp((char*)val, flag->name, len)) {
-
-        ssig->flags |= flag->value;
-        val += len;
-        goto flag_matched;
-
-      }
-    }
-
-    FATAL("Unrecognized flag in line %u.", line_no);
-
-  flag_matched:
-
-    if (*val == ',') val++;
-
-  }
-
-  srec->class_id = sig_class;
-  srec->name_id  = sig_name;
-  srec->flavor   = sig_flavor;
-  srec->label_id = label_id;
-  srec->sys      = sys;
-  srec->sys_cnt  = sys_cnt;
-  srec->line_no  = line_no;
-  srec->generic  = generic;
-
-  srec->sig      = ssig;
-
-  signatures_cnt++;
-
-}
-
-
 /* Is u32 list of ciphers/extensions matching the signature?
    first argument is record (star and question mark allowed),
    second one is an exact signature. */
@@ -209,13 +134,14 @@ void ssl_register_sig(u8 to_srv, u8 generic, s32 sig_class, u32 sig_name,
 static int match_sigs(u32* rec, u32* sig) {
 
   u8 match_any = 0;
+  u32* tmp_sig;
 
   /* Iterate over record. */
 
   for (; *rec != END_MARKER && *sig != END_MARKER; rec++) {
 
-    /* Exact match of values, move on */
-    if (*rec == *sig || (*rec & ~MATCH_MAYBE) == *sig) {
+    /* Exact match, move on */
+    if ((*rec & ~MATCH_MAYBE) == *sig) {
       match_any = 0; sig++;
       continue;
     }
@@ -226,25 +152,23 @@ static int match_sigs(u32* rec, u32* sig) {
       continue;
     }
 
-    /* Optional match */
+    /* Optional match, not yet fulfilled */
     if (*rec & MATCH_MAYBE) {
       if (match_any) {
-        u32* tmp_sig;
-        /* Look forward for the value (aka: greedy). */
+        /* Look forward for the value (aka: greedy match). */
         for (tmp_sig = sig; *tmp_sig != END_MARKER; tmp_sig++) {
-          if (*tmp_sig == (*rec & ~MATCH_MAYBE)) {
+          if ((*rec & ~MATCH_MAYBE) == *tmp_sig) {
             /* Got it. */
             match_any = 0; sig = tmp_sig + 1;
             break;
           }
         }
       }
-      /* Loop succeeded or optional match after star
-         failed, whatever, go on. */
+      /* Loop succeeded or optional match failed, whatever, go on. */
       continue;
     }
 
-    /* Match any */
+    /* Looking for an exact match after MATCH_ANY */
     if (match_any) {
       for (; *sig != END_MARKER; sig++) {
         if (*rec == *sig) {
@@ -262,9 +186,10 @@ static int match_sigs(u32* rec, u32* sig) {
 
   }
 
-  /* Right, we're after loop, either rec or sig are set to END_MARKER */
+  /* Right, we're after the loop, either rec or sig are set to END_MARKER */
 
-  /* Step 1. Roll rec until it has conditional matches. */
+  /* Step 1. Roll rec while it has conditional matches.
+             Sig is END_MARKER if rec is not done.  */
   for (;(*rec & MATCH_MAYBE) || *rec == MATCH_ANY; rec ++) {};
 
   /* Step 2. Both finished - hurray. */
@@ -279,6 +204,8 @@ static int match_sigs(u32* rec, u32* sig) {
   return 1;
 
 }
+
+
 
 
 /* TODO: dupe_det?  */
@@ -312,6 +239,9 @@ static void ssl_find_match(struct ssl_sig* ts, u8 dupe_det) {
 
 }
 
+
+/* Unpack SSLv2 header to a signature. 
+   -1 on parsing error, 1 if signature was extracted. */
 
 static int fingerprint_ssl_v2(struct ssl_sig *sig, const u8 *pay, u32 pay_len) {
 
@@ -391,6 +321,7 @@ abort_message:
   return -1;
 
 }
+
 
 /* Unpack SSLv3 fragment to a signature. We expect to hear ClientHello
  message.  -1 on parsing error, 1 if signature was extracted. */
@@ -620,6 +551,84 @@ abort_message:
   ck_free(sig->extensions);
 
   return -1;
+
+}
+
+
+
+/* Register new SSL signature. */
+
+void ssl_register_sig(u8 to_srv, u8 generic, s32 sig_class, u32 sig_name,
+                      u8* sig_flavor, u32 label_id, u32* sys, u32 sys_cnt,
+                      u8* uval, u32 line_no) {
+
+  struct ssl_sig* ssig;
+  struct ssl_sig_record* srec;
+
+  /* Client signatures only. */
+  if (to_srv != 1) return;
+
+  char *val = (char*)uval;
+  ssig = DFL_ck_alloc(sizeof(struct ssl_sig));
+
+  signatures = DFL_ck_realloc(signatures, (signatures_cnt + 1) *
+                              sizeof(struct ssl_sig_record));
+
+  srec = &signatures[signatures_cnt];
+
+
+  int maj = strtol(val, &val, 10);
+  if (!val || *val != '.') FATAL("Malformed signature in line %u.", line_no);
+  val ++;
+  int min = strtol(val, &val, 10);
+  if (!val || *val != ':') FATAL("Malformed signature in line %u.", line_no);
+  val ++;
+
+  ssig->request_version = (maj << 8) | min;
+
+  ssig->cipher_suites = decode_hex_string(&val, line_no);
+  if (!val || *val != ':' || !ssig->cipher_suites) FATAL("Malformed signature in line %u.", line_no);
+  val ++;
+
+  ssig->extensions = decode_hex_string(&val, line_no);
+  if (!val || *val != ':' || !ssig->extensions) FATAL("Malformed signature in line %u.", line_no);
+  val ++;
+
+
+  while (*val) {
+    struct flag *flag;
+    for (flag = &flags[0]; flag->name != NULL; flag ++) {
+
+      int len = strlen(flag->name);
+      if (!strncmp((char*)val, flag->name, len)) {
+
+        ssig->flags |= flag->value;
+        val += len;
+        goto flag_matched;
+
+      }
+    }
+
+    FATAL("Unrecognized flag in line %u.", line_no);
+
+  flag_matched:
+
+    if (*val == ',') val++;
+
+  }
+
+  srec->class_id = sig_class;
+  srec->name_id  = sig_name;
+  srec->flavor   = sig_flavor;
+  srec->label_id = label_id;
+  srec->sys      = sys;
+  srec->sys_cnt  = sys_cnt;
+  srec->line_no  = line_no;
+  srec->generic  = generic;
+
+  srec->sig      = ssig;
+
+  signatures_cnt++;
 
 }
 
