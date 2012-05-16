@@ -745,18 +745,24 @@ sig = sslver:ciphers:extensions:sslflags
 
                v2    - client used an older SSLv2 handshake frame, instead
                        of more recent SSLv3
+
+               Flags specific to SSLv3 handshake:
+
                ver   - requested SSL protocol was different on a protocol
-                       (request) than on a record layer (SSLv3 only)
+                       (request) than on a record layer
                stime - gmt_unix_time field has unusally was small value,
-                       most likely time since boot (SSLv3 only)
-               time  - gmt_unix_time field has value that is very far off
-                       local time, most likely it is random (SSLv3 only)
-               compr - client claims deflate compression support (SSLv3 only)
+                       most likely time since boot
+               rtime - gmt_unix_time field has value that is very far off
+                       local time, most likely it is random
+               compr - client claims deflate compression support
 
                NEW SIGNATURES: Copy literally.
 
 Any of these sections except for the 'sslver' may be blank.
 
+Note that the fingerprint is matched against signatures in order. You
+may take advantage of this feature and keep broader signatures closer
+to the bottom of the list.
 
 
 == SMTP signatures ==
@@ -818,7 +824,7 @@ The following code is also issued by the HTTP module:
   app_srv_lb   - server application signatures change, suggesting load
                  balancing.
 
-  date         - server-advertised date changes inconsistently.
+  date         - advertised date changes inconsistently.
 
 Different reasons have different weights, balanced to keep p0f very sensitive
 even to very homogenous environments behind NAT. If you end up seeing false

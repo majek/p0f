@@ -56,10 +56,10 @@ SSL handshake (ClientHello message) contains following fields:
      'stime' - when the timestamp is unnaturally small (less than one year 
                since the epoch). This is behaviour was seen in old Firefox
                releases, when gmt_unix_time is set to seconds since boot.
-     'time' - when the timestamp is far off the current value (delta
-              is bigger than 5 years). Most often this means that gmt_unix_time
-              field is set to a random value. This was seen in some
-              SSL crawlers.
+     'rtime' - when the timestamp is far off the current value (delta
+               is bigger than 5 years). Most often this means that gmt_unix_time
+               field is set to a random value. This was seen in some
+               SSL crawlers.
 
  * 28 random bytes - not very useful.
 
