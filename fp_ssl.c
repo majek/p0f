@@ -43,7 +43,7 @@ struct flag {
 struct flag flags[] = {{"compr", 4, SSL_FLAG_COMPR},
                        {"v2",    2, SSL_FLAG_V2},
                        {"ver",   3, SSL_FLAG_VER},
-                       {"time",  4, SSL_FLAG_TIME},
+                       {"rtime", 5, SSL_FLAG_RTIME},
                        {"stime", 5, SSL_FLAG_STIME},
                        {NULL, 0, 0}};
 
@@ -401,7 +401,7 @@ static int fingerprint_ssl_v3(struct ssl_sig* sig, const u8* fragment,
   } else if (abs(sig->drift) > 5*365*24*60*60) {
 
     /* More than 5 years difference - most likely random */
-    sig->flags |= SSL_FLAG_TIME;
+    sig->flags |= SSL_FLAG_RTIME;
 
     DEBUG("[#] SSL timer looks wrong: drift=%i remote_time=%08x\n",
           sig->drift, sig->remote_time);

@@ -19,7 +19,7 @@
 
 #define SSL_FLAG_V2    0x0001  /* SSLv2 handshake. */
 #define SSL_FLAG_VER   0x0002  /* Record version different than ClientHello. */
-#define SSL_FLAG_TIME  0x0004  /* weird SSL time, (delta > 5 years), most likely random*/
+#define SSL_FLAG_RTIME 0x0004  /* weird SSL time, (delta > 5 years), most likely random*/
 #define SSL_FLAG_STIME 0x0008  /* small SSL time, (absolute value < 1 year)
                                   most likely time since reboot for old ff */
 #define SSL_FLAG_COMPR 0x0010  /* Deflate compression supported. */
