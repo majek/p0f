@@ -293,7 +293,7 @@ static int fingerprint_ssl_v2(struct ssl_sig* sig, const u8* pay, u32 pay_len) {
 
   if (pay + session_id_len + challenge_len > pay_end) {
 
-    DEBUG("[#] SSLv2 frame truncated (but valid)");
+    DEBUG("[#] SSLv2 frame truncated (but valid)\n");
     goto truncated;
 
   }
@@ -317,7 +317,7 @@ truncated:
 
 too_short:
 
-  DEBUG("[#] SSLv2 frame too short");
+  DEBUG("[#] SSLv2 frame too short.\n");
 
   ck_free(sig->cipher_suites);
   ck_free(sig->extensions);
@@ -404,7 +404,7 @@ static int fingerprint_ssl_v3(struct ssl_sig* sig, const u8* fragment,
     /* More than 5 years difference - most likely random */
     sig->flags |= SSL_FLAG_RTIME;
 
-    DEBUG("[#] SSL timer looks wrong: drift=%lld remote_time=%08x\n",
+    DEBUG("[#] SSL timer looks wrong: drift=%lld remote_time=%08x.\n",
           drift, sig->remote_time);
 
   }
@@ -416,7 +416,7 @@ static int fingerprint_ssl_v3(struct ssl_sig* sig, const u8* fragment,
   for (i = 0; i < 14; i++) {
     if (random[i] == 0x0000 || random[i] == 0xffff) {
 
-      DEBUG("[#] SSL 0x%04x found in allegedly random blob at offset %i",
+      DEBUG("[#] SSL 0x%04x found in allegedly random blob at offset %i.\n",
             random[i], i);
       break;
 
@@ -536,7 +536,7 @@ static int fingerprint_ssl_v3(struct ssl_sig* sig, const u8* fragment,
   if (0) {
 truncated:
 
-    DEBUG("[#] SSL packet truncated (but valid)");
+    DEBUG("[#] SSL packet truncated (but valid).\n");
 
   }
 
@@ -891,14 +891,6 @@ u8 process_ssl(u8 to_srv, struct packet_flow* f) {
 
   }
 
-
-  long last_seen = f->client->last_seen;
-  struct tm* tm = gmtime(&last_seen);
-  char buf[512];
-
-  strftime(buf, sizeof(buf), "%d/%b/%Y:%T %z", tm);
-
-  DEBUG("%s - - [%s] ", addr_to_str(f->client->addr, f->client->ip_ver), buf);
 
   f->in_ssl = 1;
 
