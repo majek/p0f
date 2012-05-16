@@ -407,7 +407,7 @@ static int fingerprint_ssl_v3(struct ssl_sig* sig, const u8* fragment,
     /* More than 5 years difference - most likely random */
     sig->flags |= SSL_FLAG_RTIME;
 
-    DEBUG("[#] SSL timer looks wrong: drift=%lld remote_time=%08x.\n",
+    DEBUG("[#] SSL timer looks wrong: drift=%lld remote_time=%u.\n",
           drift, sig->remote_time);
 
   }
