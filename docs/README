@@ -713,6 +713,52 @@ responses to OPTIONS or POST. That said, it does not seem to be worth the
 effort: the protocol is so verbose, and implemented so arbitrarily, that we are
 getting more than enough information just with a simple GET / HEAD fingerprint.
 
+== SSL signatures ==
+
+Only SSL request fingerprinting is supported, server replies don't
+contain enough information to be valuable.
+
+SSL signatures have the following layout:
+
+sig = sslver:ciphers:extensions:sslflags
+
+  sslver     - SSL request version, may be something 2.0 and 3.0-3.3.
+
+               NEW SIGNATURES: Copy literally.
+
+  ciphers    - comma-separated list of hex values representing SSL
+               ciphers supported by the client.
+
+               NEW SIGNATURES: Review the list and feel free to subsitute
+               parts that bring no information with the match all sign '*'.
+               For efficiency avoid using star in the prefix of the
+               signature.
+
+               You may also use '?' to make particular value optional.
+
+  extensions - comma-selarated list of hex values representing
+               SSL extensions.
+
+               NEW SIGNATURES: Same as for ciphers.
+
+  sslflags   - comma-separated list of SSL flags:
+
+               v2    - client used an older SSLv2 handshake frame, instead
+                       of more recent SSLv3
+               ver   - requested SSL protocol was different on a protocol
+                       (request) than on a record layer (SSLv3 only)
+               stime - gmt_unix_time field has unusally was small value,
+                       most likely time since boot (SSLv3 only)
+               time  - gmt_unix_time field has value that is very far off
+                       local time, most likely it is random (SSLv3 only)
+               compr - client claims deflate compression support (SSLv3 only)
+
+               NEW SIGNATURES: Copy literally.
+
+Any of these sections except for the 'sslver' may be blank.
+
+
+
 == SMTP signatures ==
 
    *** NOT IMPLEMENTED YET ***
