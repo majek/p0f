@@ -739,9 +739,7 @@ static void score_nat(u8 to_srv, struct packet_flow* f, struct ssl_sig* sig) {
     s64 recv_diff    = ((s64)sig->recv_time) - hd->ssl_recv_time;
     s64 remote_diff  = ((s64)sig->remote_time) - hd->ssl_remote_time;
 
-    /* Time went back or jumped forward more than SSL_MAX_TIME_DIFF */
-
-    if (remote_diff < -SSL_MAX_TIME_DIFF ||
+    if (remote_diff < recv_diff - SSL_MAX_TIME_DIFF ||
         remote_diff > recv_diff + SSL_MAX_TIME_DIFF) {
 
       DEBUG("[#] SSL gmt_unix_time distance too high (%lld in %lld sec).\n",
