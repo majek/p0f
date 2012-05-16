@@ -795,7 +795,11 @@ static void fingerprint_ssl(u8 to_srv, struct packet_flow* f,
 
     OBSERVF("drift", "%lld", drift);
 
-  } else add_observation_field("drift", NULL);
+  } else {
+
+    OBSERVF("remote_time", "%u", sig->remote_time);
+
+  }
 
   add_observation_field("raw_sig", dump_sig(sig));
 
