@@ -999,6 +999,11 @@ sig   = 3.1:ff,c00a,c014,88,87,39,38,*,c003,feff,a:?0,a,b,23:
 ; with SSL disalbed
 sig   = 3.1:c00a,c014,88,87,39,38,*,c003,feff,a:?0,ff01,a,b,23:
 
+label = s:!:Firefox:11 (TOR)
+sys   = Windows,@unix
+; Lack of a single extension (SessionTicket TLS) is not a very strong signal.
+sig   = 3.1:ff,c00a,c014,88,87,39,38,*,c003,feff,a:?0,a,b:
+
 label = s:!:Firefox:14 or newer
 sys   = Windows,@unix
 sig   = 3.1:ff,c00a,c014,88,87,39,38,*,c003,feff,a:?0,a,b,23,3374:
@@ -1129,4 +1134,3 @@ sig   = 3.1:c014,c00a,39,38,88,87,c00f,c005,35,84,*,8,6,3,ff:?0,b,a:compr
 label = s:!:Epiphany:2.X
 sys   = Linux
 sig   = 3.0:33,39,16,32,38,13,2f,35,a,5,4::
-
