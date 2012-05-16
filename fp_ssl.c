@@ -40,7 +40,7 @@ struct flag {
   u32 value;
 };
 
-struct flag flags[] = {{"compr", 4, SSL_FLAG_COMPR},
+struct flag flags[] = {{"compr", 5, SSL_FLAG_COMPR},
                        {"v2",    2, SSL_FLAG_V2},
                        {"ver",   3, SSL_FLAG_VER},
                        {"rtime", 5, SSL_FLAG_RTIME},
@@ -95,6 +95,10 @@ static u32* decode_hex_string(const u8** val_ptr, u32 line_no) {
       break;
 
     default:
+      /* Support empty list - jump to second state. */
+      if (p == 0)
+        break;
+
       return NULL;
 
     }
@@ -204,7 +208,6 @@ static int match_sigs(u32* rec, u32* sig) {
   return 1;
 
 }
-
 
 
 static void ssl_find_match(struct ssl_sig* ts) {
@@ -477,7 +480,9 @@ static int fingerprint_ssl_v3(struct ssl_sig* sig, const u8* fragment,
 
   }
 
-  if (pay + 2 > pay_end) goto truncated;
+  /* Extensions are optional in SSLv3. */
+
+  if (pay + 2 > pay_end) goto truncated_ok;
 
   u16 extensions_len = (pay[0] << 8) | pay[1];
   pay += 2;
@@ -539,6 +544,7 @@ truncated:
     DEBUG("[#] SSL packet truncated (but valid).\n");
 
   }
+truncated_ok:
 
   if (!sig->extensions) {
     sig->extensions    = ck_alloc(1*sizeof(u32));
@@ -725,7 +731,8 @@ static void score_nat(u8 to_srv, struct packet_flow* f, struct ssl_sig* sig) {
 
   }
 
-  if (sig->remote_time && (sig->flags & SSL_FLAG_RTIME) == 0) {
+  if (hd->ssl_remote_time && sig->remote_time &&
+      (sig->flags & SSL_FLAG_RTIME) == 0) {
 
     /* Time on the client should be increasing monotically */
 

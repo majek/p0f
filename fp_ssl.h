@@ -113,7 +113,7 @@ u8 process_ssl(u8 to_srv, struct packet_flow* f);
 
 #define MATCH_MAYBE 0x10000000  /* '?' */
 #define MATCH_ANY   0x20000000  /* '*' */
-#define END_MARKER  0xFF000000
+#define END_MARKER  0x40000000
 
 
 #define SSL_MAX_CIPHERS 128
