@@ -71,16 +71,16 @@ struct ssl_sig_record;
 
 struct ssl_sig {
 
-  u16 request_version;          /* Requested SSL version (maj << 8) | min */
+  u16 request_version;   /* Requested SSL version (maj << 8) | min */
 
-  u32 remote_time;              /* ClientHello message gmt_unix_time field */
-  s32 drift;                    /* Local time - remote time */
+  u32 remote_time;       /* ClientHello message gmt_unix_time field */
+  u32 recv_time;         /* Actual receive time */
 
-  u32* cipher_suites;
+  u32* cipher_suites;    /* List of SSL ciphers, END_MARKER terminated */
 
-  u32* extensions;
+  u32* extensions;       /* List of SSL extensions, END_MARKER terminated */
 
-  u32 flags;
+  u32 flags;             /* SSL flags */
 
   struct ssl_sig_record* matched; /* NULL = no match */
 };
@@ -115,5 +115,8 @@ u8 process_ssl(u8 to_srv, struct packet_flow* f);
 #define MATCH_ANY   0x20000000  /* '*' */
 #define END_MARKER  0xFF000000
 
+
+#define SSL_MAX_CIPHERS 128
+#define SSL_MAX_TIME_DIFF 10
 
 #endif /* _HAVE_FP_SSL_H */

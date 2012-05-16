@@ -65,10 +65,10 @@ static u32* decode_hex_string(const u8** val_ptr, u32 line_no) {
 
   const u8* val = *val_ptr;
 
-  u32 rec[128];
+  u32 rec[SSL_MAX_CIPHERS];
   u8 p = 0;
 
-  while (p < 128) {
+  while (p < SSL_MAX_CIPHERS) {
 
     u32 optional = 0;
     const u8* prev_val;
@@ -391,20 +391,21 @@ static int fingerprint_ssl_v3(struct ssl_sig* sig, const u8* fragment,
   sig->remote_time = ntohl(*((u32*)pay));
   pay += 4;
 
-  sig->drift       = local_time - sig->remote_time;
+  sig->recv_time = local_time;
+  s64 drift = ((s64)sig->recv_time) - sig->remote_time;
 
   if (sig->remote_time < 1*365*24*60*60) {
 
     /* Old Firefox on windows uses time since boot */
     sig->flags |= SSL_FLAG_STIME;
 
-  } else if (abs(sig->drift) > 5*365*24*60*60) {
+  } else if (abs(drift) > 5*365*24*60*60) {
 
     /* More than 5 years difference - most likely random */
     sig->flags |= SSL_FLAG_RTIME;
 
-    DEBUG("[#] SSL timer looks wrong: drift=%i remote_time=%08x\n",
-          sig->drift, sig->remote_time);
+    DEBUG("[#] SSL timer looks wrong: drift=%lld remote_time=%08x\n",
+          drift, sig->remote_time);
 
   }
 
@@ -412,7 +413,7 @@ static int fingerprint_ssl_v3(struct ssl_sig* sig, const u8* fragment,
   u16* random = (u16*)pay;
   pay += 28;
 
-  for (i=0; i<14; i++) {
+  for (i = 0; i < 14; i++) {
     if (random[i] == 0x0000 || random[i] == 0xffff) {
 
       DEBUG("[#] SSL 0x%04x found in allegedly random blob at offset %i",
@@ -578,7 +579,7 @@ static u8* dump_sig(struct ssl_sig* sig) {
 
   RETF("%i.%i:", sig->request_version >> 8, sig->request_version & 0xFF);
 
-  for (i=0; sig->cipher_suites[i] != END_MARKER; i++) {
+  for (i = 0; sig->cipher_suites[i] != END_MARKER; i++) {
     u32 c = sig->cipher_suites[i];
     if (c != MATCH_ANY) {
       RETF("%s%s%x", (i ? "," : ""),
@@ -591,7 +592,7 @@ static u8* dump_sig(struct ssl_sig* sig) {
 
   RETF(":");
 
-  for (i=0; sig->extensions[i] != END_MARKER; i++) {
+  for (i = 0; sig->extensions[i] != END_MARKER; i++) {
     u32 ext = sig->extensions[i];
     if (ext != MATCH_ANY) {
       RETF("%s%s%x", (i ? "," : ""),
@@ -605,7 +606,7 @@ static u8* dump_sig(struct ssl_sig* sig) {
   RETF(":");
 
   int had_prev = 0;
-  for (i=0; flags[i].name != NULL; i++) {
+  for (i = 0; flags[i].name != NULL; i++) {
 
     if (sig->flags & flags[i].value) {
       RETF("%s%s", (had_prev ? "," : ""), flags[i].name);
@@ -630,6 +631,11 @@ void ssl_register_sig(u8 to_srv, u8 generic, s32 sig_class, u32 sig_name,
 
   /* Client signatures only. */
   if (to_srv != 1) return;
+
+  /* Only "application" signatures supported, no "OS-identifying". */
+  if (sig_class != -1)
+    FATAL("OS-identifying SSL signatures not supported, use \"!\" instead "
+          "of an OS class in line %u.", line_no);
 
   ssig = DFL_ck_alloc(sizeof(struct ssl_sig));
 
@@ -695,40 +701,100 @@ void ssl_register_sig(u8 to_srv, u8 generic, s32 sig_class, u32 sig_name,
 
 }
 
+static void score_nat(u8 to_srv, struct packet_flow* f, struct ssl_sig* sig) {
+
+  struct ssl_sig_record* m = sig->matched;
+  struct host_data* hd;
+
+  u8  score = 0;
+  u16 reason = 0;
+
+  /* Client request only. */
+  if (to_srv != 1) return;
+
+  hd = f->client;
 
 
-static void fingerprint_ssl(u8 to_srv, struct packet_flow* f, struct ssl_sig* sig) {
+  if (m && m->class_id == -1) {
 
-  struct ssl_sig_record* m;
-  if (to_srv) {
-    ssl_find_match(sig);
-  } else {
-    // TODO
+    /* Application signature: we might look at the OS-es mentioned by
+       the signature, and make sure the OS from http and/or TCP
+       matches. */
+
+    verify_tool_class(to_srv, f, m->sys, m->sys_cnt);
+
   }
+
+  if (sig->remote_time && (sig->flags & SSL_FLAG_RTIME) == 0) {
+
+    /* Time on the client should be increasing monotically */
+
+    s64 recv_diff    = ((s64)sig->recv_time) - hd->ssl_recv_time;
+    s64 remote_diff  = ((s64)sig->remote_time) - hd->ssl_remote_time;
+
+    /* Time went back or jumped forward more than SSL_MAX_TIME_DIFF */
+
+    if (remote_diff < -SSL_MAX_TIME_DIFF ||
+        remote_diff > recv_diff + SSL_MAX_TIME_DIFF) {
+
+      DEBUG("[#] SSL gmt_unix_time distance too high (%lld in %lld sec).\n",
+            remote_diff, recv_diff);
+
+      score += 4;
+      reason |= NAT_APP_DATE;
+
+    }
+
+  }
+
+  add_nat_score(to_srv, f, reason, score);
+
+}
+
+
+
+/* Given an SSL client signature look it up and create an observation.  */
+
+static void fingerprint_ssl(u8 to_srv, struct packet_flow* f,
+                            struct ssl_sig* sig) {
+
+  /* Client request only. */
+  if (to_srv != 1) return;
+
+  ssl_find_match(sig);
+
+  struct ssl_sig_record* m = sig->matched;
 
   start_observation("ssl request", 4, to_srv, f);
 
-  if ((m = sig->matched)) {
+  if (m) {
+
+    /* Found matching signature */
 
     OBSERVF((m->class_id < 0) ? "app" : "os", "%s%s%s",
             fp_os_names[m->name_id], m->flavor ? " " : "",
             m->flavor ? m->flavor : (u8*)"");
 
     add_observation_field("match_sig", dump_sig(sig->matched->sig));
+
   } else {
+
     add_observation_field("app", NULL);
     add_observation_field("match_sig", NULL);
+
   }
 
-  if ((sig->flags & (SSL_FLAG_TIME | SSL_FLAG_STIME)) == 0) {
+  if ((sig->flags & (SSL_FLAG_RTIME | SSL_FLAG_STIME)) == 0) {
 
-    OBSERVF("drift", "%i", abs(sig->drift));
+    s64 drift = ((s64)sig->recv_time) - sig->remote_time;
+
+    OBSERVF("drift", "%lld", drift);
 
   } else add_observation_field("drift", NULL);
 
-// if stime - time from reboot (ff 2.0)
-
   add_observation_field("raw_sig", dump_sig(sig));
+
+  score_nat(to_srv, f, sig);
 
 }
 
@@ -826,8 +892,8 @@ u8 process_ssl(u8 to_srv, struct packet_flow* f) {
   }
 
 
-  long a = f->client->last_seen;
-  struct tm* tm = gmtime(&a);
+  long last_seen = f->client->last_seen;
+  struct tm* tm = gmtime(&last_seen);
   char buf[512];
 
   strftime(buf, sizeof(buf), "%d/%b/%Y:%T %z", tm);
@@ -837,6 +903,10 @@ u8 process_ssl(u8 to_srv, struct packet_flow* f) {
   f->in_ssl = 1;
 
   fingerprint_ssl(to_srv, f, &sig);
+
+  f->client->ssl_remote_time = sig.remote_time;
+  f->client->ssl_recv_time   = sig.recv_time;
+
 
   ck_free(sig.cipher_suites);
   ck_free(sig.extensions);
