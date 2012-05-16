@@ -61,9 +61,9 @@ static u32 signatures_cnt;
 /* Decode a string of comma separated hex numbers into an annotated
    u32 array. Exit with success on '\0' or ':'. */
 
-static u32* decode_hex_string(u8** val_ptr, u32 line_no) {
+static u32* decode_hex_string(const u8** val_ptr, u32 line_no) {
 
-  u8* val = *val_ptr;
+  const u8* val = *val_ptr;
 
   u32 rec[128];
   u8 p = 0;
@@ -71,7 +71,7 @@ static u32* decode_hex_string(u8** val_ptr, u32 line_no) {
   while (p < 128) {
 
     u32 optional = 0;
-    u8* prev_val;
+    const u8* prev_val;
     u32* ret;
 
     /* State #1: expecting value */
@@ -239,14 +239,14 @@ static void ssl_find_match(struct ssl_sig* ts) {
 /* Unpack SSLv2 header to a signature. 
    -1 on parsing error, 1 if signature was extracted. */
 
-static int fingerprint_ssl_v2(struct ssl_sig *sig, const u8 *pay, u32 pay_len) {
+static int fingerprint_ssl_v2(struct ssl_sig* sig, const u8* pay, u32 pay_len) {
 
-  const u8 *pay_end = pay + pay_len;
-  const u8 *tmp_end;
+  const u8* pay_end = pay + pay_len;
+  const u8* tmp_end;
 
   if (pay + sizeof(struct ssl2_hdr) > pay_end) goto too_short;
 
-  struct ssl2_hdr *hdr = (struct ssl2_hdr*)pay;
+  struct ssl2_hdr* hdr = (struct ssl2_hdr*)pay;
   pay += sizeof(struct ssl2_hdr);
 
   if (hdr->ver_min == 2 && hdr->ver_maj == 0) {
@@ -330,20 +330,20 @@ too_short:
 /* Unpack SSLv3 fragment to a signature. We expect to hear ClientHello
  message.  -1 on parsing error, 1 if signature was extracted. */
 
-static int fingerprint_ssl_v3(struct ssl_sig *sig, const u8 *fragment,
+static int fingerprint_ssl_v3(struct ssl_sig* sig, const u8* fragment,
                               u32 frag_len, u16 record_version, u32 local_time) {
 
   int i;
-  const u8 *frag_end = fragment + frag_len;
+  const u8* frag_end = fragment + frag_len;
 
-  struct ssl3_message_hdr *msg = (struct ssl3_message_hdr*)fragment;
+  struct ssl3_message_hdr* msg = (struct ssl3_message_hdr*)fragment;
   u32 msg_len = (msg->length[0] << 16) |
                 (msg->length[1] << 8) |
                 (msg->length[2]);
 
-  const u8 *pay = (const u8*)msg + sizeof(struct ssl3_message_hdr);
-  const u8 *pay_end = pay + msg_len;
-  const u8 *tmp_end;
+  const u8* pay = (const u8*)msg + sizeof(struct ssl3_message_hdr);
+  const u8* pay_end = pay + msg_len;
+  const u8* tmp_end;
 
 
   /* Record size goes beyond current fragment, it's fine by SSL but
@@ -404,12 +404,12 @@ static int fingerprint_ssl_v3(struct ssl_sig *sig, const u8 *fragment,
     sig->flags |= SSL_FLAG_TIME;
 
     DEBUG("[#] SSL timer looks wrong: drift=%i remote_time=%08x\n",
-          drift, sig->remote_time);
+          sig->drift, sig->remote_time);
 
   }
 
   /* Random */
-  u16 *random = (u16*)pay;
+  u16* random = (u16*)pay;
   pay += 28;
 
   for (i=0; i<14; i++) {
@@ -491,7 +491,7 @@ static int fingerprint_ssl_v3(struct ssl_sig *sig, const u8 *fragment,
 
     u16 ext_type = (pay[0] << 8) | pay[1];
     u16 ext_len  = (pay[2] << 8) | pay[3];
-    const u8 *extension = &pay[4];
+    const u8* extension = &pay[4];
     pay += 4;
 
     pay += ext_len;
@@ -648,12 +648,12 @@ void ssl_register_sig(u8 to_srv, u8 generic, s32 sig_class, u32 sig_name,
 
   ssig->request_version = (maj << 8) | min;
 
-  ssig->cipher_suites = decode_hex_string(&val, line_no);
+  ssig->cipher_suites = decode_hex_string((const u8**)&val, line_no);
   if (!val || *val != ':' || !ssig->cipher_suites)
     FATAL("Malformed signature in line %u.", line_no);
   val ++;
 
-  ssig->extensions = decode_hex_string(&val, line_no);
+  ssig->extensions = decode_hex_string((const u8**)&val, line_no);
   if (!val || *val != ':' || !ssig->extensions)
     FATAL("Malformed signature in line %u.", line_no);
   val ++;
@@ -737,7 +737,7 @@ static void fingerprint_ssl(u8 to_srv, struct packet_flow* f, struct ssl_sig* si
    plausibly can be read. Note that the buffer is always NULL
    terminated. */
 
-u8 process_ssl(u8 to_srv, struct packet_flow *f) {
+u8 process_ssl(u8 to_srv, struct packet_flow* f) {
 
   int success = 0;
   struct ssl_sig sig;
@@ -762,10 +762,10 @@ u8 process_ssl(u8 to_srv, struct packet_flow *f) {
 
   if (f->req_len < 6) return can_get_more;
 
-  struct ssl2_hdr *hdr2 = (struct ssl2_hdr*)f->request;
+  struct ssl2_hdr* hdr2 = (struct ssl2_hdr*)f->request;
   u16 msg_length = ntohs(hdr2->msg_length);
 
-  struct ssl3_record_hdr *hdr3 = (struct ssl3_record_hdr*)f->request;
+  struct ssl3_record_hdr* hdr3 = (struct ssl3_record_hdr*)f->request;
   u16 fragment_len = ntohs(hdr3->length);
 
 
@@ -808,7 +808,7 @@ u8 process_ssl(u8 to_srv, struct packet_flow *f) {
     memset(&sig, 0, sizeof(struct ssl_sig));
     u16 record_version = (hdr3->ver_maj << 8) | hdr3->ver_min;
 
-    u8 *fragment = f->request + sizeof(struct ssl3_record_hdr);
+    u8* fragment = f->request + sizeof(struct ssl3_record_hdr);
 
     success = fingerprint_ssl_v3(&sig, fragment, fragment_len,
                                  record_version,
@@ -827,7 +827,7 @@ u8 process_ssl(u8 to_srv, struct packet_flow *f) {
 
 
   long a = f->client->last_seen;
-  struct tm *tm = gmtime(&a);
+  struct tm* tm = gmtime(&a);
   char buf[512];
 
   strftime(buf, sizeof(buf), "%d/%b/%Y:%T %z", tm);
