@@ -574,7 +574,7 @@ too_short:
 
 /* Signature - to - string */
 
-static u8* dump_sig(struct ssl_sig* sig) {
+static u8* dump_sig(struct ssl_sig* sig, u8 fingerprint) {
 
   int i;
 
@@ -607,8 +607,12 @@ static u8* dump_sig(struct ssl_sig* sig) {
   for (i = 0; sig->extensions[i] != END_MARKER; i++) {
     u32 ext = sig->extensions[i];
     if (ext != MATCH_ANY) {
+      u8 optional = 0;
+      if (fingerprint && ext == 0) {
+        optional = 1;
+      }
       RETF("%s%s%x", (i ? "," : ""),
-           ((ext & MATCH_MAYBE) || ext == 0) ? "?" : "",
+           ((ext & MATCH_MAYBE) || optional) ? "?" : "",
            ext & ~MATCH_MAYBE);
     } else {
       RETF("%s*", (i ? "," : ""));
@@ -786,7 +790,7 @@ static void fingerprint_ssl(u8 to_srv, struct packet_flow* f,
             fp_os_names[m->name_id], m->flavor ? " " : "",
             m->flavor ? m->flavor : (u8*)"");
 
-    add_observation_field("match_sig", dump_sig(sig->matched->sig));
+    add_observation_field("match_sig", dump_sig(sig->matched->sig, 0));
 
   } else {
 
@@ -808,7 +812,7 @@ static void fingerprint_ssl(u8 to_srv, struct packet_flow* f,
 
   OBSERVF("remote_time", "%u", sig->remote_time);
 
-  add_observation_field("raw_sig", dump_sig(sig));
+  add_observation_field("raw_sig", dump_sig(sig, 1));
 
   score_nat(to_srv, f, sig);
 
