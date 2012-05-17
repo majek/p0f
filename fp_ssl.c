@@ -480,9 +480,16 @@ static int fingerprint_ssl_v3(struct ssl_sig* sig, const u8* fragment,
 
   }
 
-  /* Extensions are optional in SSLv3. */
 
-  if (pay + 2 > pay_end) goto truncated_ok;
+  if (pay + 2 > pay_end) {
+
+    /* Extensions are optional in SSLv3. This behaviour was considered
+       as a flag, but it doesn't bring any entropy. In other words:
+       noone who is able to send extensions sends an empty list.  An
+       empty list of extensions is equal to SSLv2 or this branch. */
+    goto truncated_ok;
+
+  }
 
   u16 extensions_len = (pay[0] << 8) | pay[1];
   pay += 2;
