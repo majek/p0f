@@ -916,12 +916,12 @@ sig   = *:Content-Type,X-Content-Type-Options=[nosniff],Server=[GSE]:Connection,
 
 ; Windows NT 5.1, Windows NT 5.2 (XP)
 label = s:!:any:MSIE or Safari on Windows XP
-sys   = Windows XP
+sys   = Windows
 sig   = 3.1:4,5,a,9,64,62,3,6,13,12,63:ff01:
 ; no MS10-049 applied?
 sig   = 3.1:4,5,a,9,64,62,3,6,13,12,63::
 
-; some SSL/TLS options tweaked
+; with some SSL/TLS options tweaked
 sig   = 3.0:4,5,a,9,64,62,3,6,13,12,63,ff::
 sig   = 3.0:4,5,a,10080,700c0,30080,9,60040,64,62,3,6,20080,40080,13,12,63,ff::v2
 sig   = 2.0:10080,700c0,30080,60040,20080,40080,ff::v2
@@ -929,31 +929,31 @@ sig   = 2.0:10080,700c0,30080,60040,20080,40080,ff::v2
 
 ; Windows NT 6.0 (Vista)
 label = s:!:any:MSIE 5.5-6 or Chrome 1-4 or Safari on Windows Vista
-sys   = Windows Vista
+sys   = Windows
 sig   = 3.1:2f,35,5,a,c009,c00a,c013,c014,32,38,13,4:?0,a,b,ff01:
 
 label = s:!:any:MSIE 7.0-9.0 or Chrome 5 on Windows Vista
-sys   = Windows Vista
+sys   = Windows
 sig   = 3.1:2f,35,5,a,c009,c00a,c013,c014,32,38,13,4:?0,5,a,b,ff01:
 
 
 ; Windows NT 6.1 (7)
-label = s:!:MSIE:7-9
-sys   = Windows 7
+label = s:!:MSIE:7-9 on Windows 7
+sys   = Windows
 sig   = 3.1:2f,35,5,a,c013,c014,c009,c00a,32,38,13,4:ff01,?0,5,a,b:
 
-label = s:!:Safari:
-sys   = Windows 7
+label = s:!:Safari:on Windows 7
+sys   = Windows
 sig   = 3.1:2f,35,5,a,c013,c014,c009,c00a,32,38,13,4:ff01,?0,a,b:
 
-; Windows NT 6.2 (8)
+; Windows NT 6.2 ( 8)
 ; 23 usually means NT 6.2
-label = s:!:MSIE:10
-sys   = Windows 8
+label = s:!:MSIE:10 on Windows 8
+sys   = Windows
 sig   = 3.1:2f,35,5,a,c013,c014,c009,c00a,32,38,13,4:ff01,?0,5,a,b,23:
 
-label = s:!:Safari:
-sys   = Windows 8
+label = s:!:Safari:Safari on Windows 8
+sys   = Windows
 sig   = 3.1:2f,35,5,a,c013,c014,c009,c00a,32,38,13,4:ff01,?0,a,b,23:
 
 
@@ -996,7 +996,7 @@ sig   = 3.1:ff,c00a,c014,88,87,38,c00f,c005,84,35,39,*,c00d,c003,feff,a:?0,a,b,2
 label = s:!:Firefox:4-11
 sys   = Windows,@unix
 sig   = 3.1:ff,c00a,c014,88,87,39,38,*,c003,feff,a:?0,a,b,23:
-; with SSL disalbed
+; with SSLv2 disalbed
 sig   = 3.1:c00a,c014,88,87,39,38,*,c003,feff,a:?0,ff01,a,b,23:
 
 label = s:!:Firefox:11 (TOR)
@@ -1019,16 +1019,16 @@ sig   = 3.0:ff,88,87,39,38,84,35,45,44,33,32,96,41,4,5,2f,16,13,feff,a::
 ; ------
 ; Safari on old PowerPC box
 label = s:!:Safari:4.X
-sys   = OS X
+sys   = Mac OS X
 sig   = 3.1:2f,5,4,35,a,ff83,*,17,19,1::
 sig   = 3.1:2f,5,4,35,a,ff83,*,17,19,1,10080,*,700c0::v2
 
 label = s:!:Safari:5.1.2
-sys   = OS X
+sys   = Mac OS X
 sig   = 3.1:c00a,c009,c007,c008,c013,*,33,38,39,16,15,14,13,12,11:?0,a,b:
 
 label = s:!:Safari:5.1.3 or newer
-sys   = OS X
+sys   = Mac OS X
 sig   = 3.1:c00a,c009,c007,c008,c013,*,33,38,39,16,13:?0,a,b:
 
 
@@ -1036,20 +1036,21 @@ sig   = 3.1:c00a,c009,c007,c008,c013,*,33,38,39,16,13:?0,a,b:
 ; Android
 ; -------
 
+; in http Android is treated as Linux, oh, well...
 label = s:!:Android:1.5-2.1
-sys   = Android
+sys   = Linux
 sig   = 3.1:39,38,35,16,13,a,33,32,2f,5,4,15,12,9,14,11,8,6,3::
 
 label = s:!:Android:2.3
-sys   = Android
+sys   = Linux
 sig   = 3.1:4,5,2f,33,32,a,16,13,9,15,12,3,8,14,11,ff::
 
 label = s:!:Android:3.2
-sys   = Android
+sys   = Linux
 sig   = 3.1:c014,c00a,39,38,c00f,c005,35,*,c00c,c002,5,4,15,12,9,14,11,8,6,3,ff:?0,b,a,23,3374:compr
 
 label = s:!:Android:4.X
-sys   = Android
+sys   = Linux
 sig   = 3.1:c014,c00a,39,38,c00f,c005,35,*,c00c,c002,5,4,ff:?0,b,a,23,3374:compr
 
 ; -----------
@@ -1074,7 +1075,7 @@ sig   = 3.1:39,38,37,36,35,33,32,31,30,2f,5,4,13,d,16,10,a:?0,ff01,5:
 sig   = 3.1:ff,39,38,37,36,35,33,32,31,30,2f,5,4,13,d,16,10,a:?0,ff01,5:
 
 label = s:!:HP-tablet:unknown
-sys   = touchpad
+sys   = Touchpad
 sig   = 3.1:39,38,35,16,13,a,33,32,2f,5,4:?0:
 
 
