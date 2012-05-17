@@ -777,7 +777,7 @@ static void fingerprint_ssl(u8 to_srv, struct packet_flow* f,
 
   struct ssl_sig_record* m = sig->matched;
 
-  start_observation("ssl request", 4, to_srv, f);
+  start_observation("ssl request", 5, to_srv, f);
 
   if (m) {
 
@@ -799,14 +799,15 @@ static void fingerprint_ssl(u8 to_srv, struct packet_flow* f,
   if ((sig->flags & (SSL_FLAG_RTIME | SSL_FLAG_STIME)) == 0) {
 
     s64 drift = ((s64)sig->recv_time) - sig->remote_time;
-
     OBSERVF("drift", "%lld", drift);
 
   } else {
 
-    OBSERVF("remote_time", "%u", sig->remote_time);
+    add_observation_field("drift", NULL);
 
   }
+
+  OBSERVF("remote_time", "%u", sig->remote_time);
 
   add_observation_field("raw_sig", dump_sig(sig));
 
