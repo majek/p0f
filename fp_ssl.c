@@ -3,7 +3,7 @@
   p0f - SSL fingerprinting
   -------------------------
 
-  Copyright (C) 2012 by Marek Majkowski <marek@popcnt.org>
+  Copyright (C) 2012 by Marek Majkowski <marek@popcount.org>
 
   Distributed under the terms and conditions of GNU LGPL.
 
@@ -48,11 +48,10 @@ struct flag flags[] = {{"compr", 5, SSL_FLAG_COMPR},
                        {NULL, 0, 0}};
 
 
-/* Signatures are stored as flat list. Matching should be rather fast:
-   ssl version and flags must match exactly, matching ciphers and
-   extensions usually require looking only at a first few bytes of the
-   signature. Of course - assuming the signature doesn't start with a
-   star. */
+/* Signatures are stored as flat list. Matching is fast: ssl version
+   and flags must match exactly, matching ciphers and extensions
+   usually require looking only at a first few bytes of the
+   signature. Assuming the signature doesn't start with a star. */
 
 static struct ssl_sig_record* signatures;
 static u32 signatures_cnt;

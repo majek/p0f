@@ -1,11 +1,11 @@
 /* -*-mode:c; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
 /*
-   p0f - SSL fingerprinting
-   -------------------------
+  p0f - SSL fingerprinting
+  -------------------------
 
-   Copyright (C) 2012 by Marek Majkowski <marek@popcnt.org>
+  Copyright (C) 2012 by Marek Majkowski <marek@popcount.org>
 
-   Distributed under the terms and conditions of GNU LGPL.
+  Distributed under the terms and conditions of GNU LGPL.
 
  */
 
@@ -15,6 +15,16 @@
 #include "types.h"
 
 
+/* Constants */
+
+#define MATCH_MAYBE 0x10000000  /* '?' - indicats a single optional match */
+#define MATCH_ANY   0x20000000  /* '*' - match zero or more elements */
+#define END_MARKER  0x40000000  /* internal marker */
+
+#define SSL_MAX_CIPHERS 128     /* max number of ciphers in a signature */
+#define SSL_MAX_TIME_DIFF 10    /* remote clock scew limit, in seconds */
+
+
 /* Flags */
 
 #define SSL_FLAG_V2    0x0001  /* SSLv2 handshake. */
@@ -22,7 +32,7 @@
 #define SSL_FLAG_RTIME 0x0004  /* weird SSL time, (delta > 5 years), most likely random*/
 #define SSL_FLAG_STIME 0x0008  /* small SSL time, (absolute value < 1 year)
                                   most likely time since reboot for old ff */
-#define SSL_FLAG_COMPR 0x0010  /* Deflate compression supported. */
+#define SSL_FLAG_COMPR 0x0010  /* Deflate compression support. */
 
 
 /* SSLv2 */
@@ -109,14 +119,5 @@ void ssl_register_sig(u8 to_srv, u8 generic, s32 sig_class, u32 sig_name,
 		      u8* val, u32 line_no);
 
 u8 process_ssl(u8 to_srv, struct packet_flow* f);
-
-
-#define MATCH_MAYBE 0x10000000  /* '?' */
-#define MATCH_ANY   0x20000000  /* '*' */
-#define END_MARKER  0x40000000
-
-
-#define SSL_MAX_CIPHERS 128
-#define SSL_MAX_TIME_DIFF 10
 
 #endif /* _HAVE_FP_SSL_H */

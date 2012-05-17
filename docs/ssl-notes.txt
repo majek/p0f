@@ -1,26 +1,33 @@
 
+SSL fingerprinting
+==================
 
-Not many people realise that the unencrypted SSL handshake
-(ClientHello message) reveals some details about the client.
+Not many people realise that the unencrypted SSL / TLS handshake
+(ClientHello message) reveals some fingerprintable details about the
+client.
 
-For given application using SSL it is possible to fingerprint
-underlying SSL library. In many cases, especially in the browser
-world, it is even possible to pinpoint specific application and
-release.
+For a given application using SSL it is possible to fingerprint
+underlying SSL library. In many cases it is even possible to pinpoint
+specific application version.
 
-As SSL traffic is unharmed by proxies or routers, we can have high
-confidentiality that the SSL fingerprint does identify a genuine
-client. This may be very for detecting NAT's.
+This especially true in the browser world, where the SSL libraries are
+most often bundled with a release. Additionally, on the web a lot of
+innovation happens on SSL layer, like SPDY, ECC or 'renegotiation
+info' extension.
+
+Additionally SSL traffic is unharmed by proxies or routers, we can
+have high confidentiality that the SSL fingerprint does identify a
+genuine application. This is useful for detecting NAT's.
 
 Although initial frames sent from both SSL client and server are
-similar, only frame sent by the client - ClientHello, can be passively
-fingerprinted. The server frame - ServerHello doesn't have enough
-information. If you wish to fingerprint SSL servers - an active
-fingerprinting tool would be more suitable.
+similar, only frame sent by the client 'ClientHello', can be passively
+fingerprinted. The server frame 'ServerHello' doesn't have enough
+information. If you wish to fingerprint SSL servers an active
+fingerprinting tool may be more suitable.
 
 
 Fingerprinting SSL is not a new idea, initial work was done in mid
-2009 by Ivan Ristić:
+2009 by Ivan Ristic:
 
  * https://www.ssllabs.com/projects/client-fingerprinting/
 
@@ -28,31 +35,29 @@ He was able to collect few dozen interesting signatures:
 
  * http://blog.ivanristic.com/2009/07/examples-of-the-information-collected-from-ssl-handshakes.html
 
-Though, in his works he seem to have ignored the SSL extensions field,
-which add valuable information to a fingerprint. Especially the
-ordering of extensions has high value, similarly to the TCP options
-ordering for TCP/IP stack fingerprinting.
+Unfortunately on his works he seem to have totally ignored the SSL
+extensions list, which add valuable information to a
+fingerprint. Especially the ordering of extensions has high value,
+similarly to the TCP options ordering for TCP/IP stack fingerprinting.
 
 
 SSL handshake (ClientHello message) contains following fields:
 
- * SSL handshake version - browsers usually use version 3, Ivan Ristić
+ * SSL record version - browsers usually use version 3, Ivan Ristic
    research shows that web crawlers (including wget) still use 2.
    We set a flag:
      'v2'  - if request is SSL version 2
 
- * Requested protocol version - most likely 3.1. Less likely values
+ * Requested SSL protocol version - most likely 3.1. Less likely values
    are 3.0 and 3.2. SSL crawlers trying invalid versions like 4.2 were
    seen in the wild. ('request_version')
    We set a flag:
-     'ver' - if, for SSL version 3, the version on a 'request' block
-             is different than on 'record' block. This behaviour was seen
-             only in Opera.
+     'ver' - if, for SSL version 3, the version on a 'request' layer
+             is different than on 'record' layer. This behaviour was seen
+             in Opera.
 
- * gmt_unix_time - a timestamp from the client. Adding this
-   information to knowledge gathered from the TCP timestamp could
-   become a valuable factor in detecting NATs. In the code we may
-   set two flags from this value:
+ * gmt_unix_time - a timestamp from the client. In the code we may
+   set one of two flags derived from this value:
      'stime' - when the timestamp is unnaturally small (less than one year 
                since the epoch). This is behaviour was seen in old Firefox
                releases, when gmt_unix_time is set to seconds since boot.
@@ -61,22 +66,43 @@ SSL handshake (ClientHello message) contains following fields:
                field is set to a random value. This was seen in some
                SSL crawlers.
 
- * 28 random bytes - not very useful.
+ * 28 random bytes - not very useful. In a debug build a warning will
+   be printed if the values don't look very randomly.
 
  * session_id - a client may choose to resume previous SSL session. Ignored.
 
- * cipher_suites - a list of supported encryption algorithms ('cipher_suites')
+ * cipher_suites - a list of supported encryption algorithms ('ciphers').
+   For the meaning of the numbers refer to:
+       http://www.iana.org/assignments/tls-parameters/tls-parameters.xml#tls-parameters-3
 
  * compression_methods - a list of supported compression methods. There
    is only one valid compression method available, so we set a flag:
        'compr' - if compression is enabled 
 
  * extensions - a list of SSL extensions. Second, after cipher_suites,
-   major source of data. ('extensions')
+   major source of data. For exact meaning refer to:
+        http://www.iana.org/assignments/tls-extensiontype-values/tls-extensiontype-values.xml
 
 
 It's worth noting that SSL extensions contain not only a list of
 supported extensions but also optional payload for every extension.
-Currently, we ignore the payload as the experiments shown that it
-isn't an interesting source of data - we can squeeze the same
-entropy by just looking at the ordering of SSL extensions.
+We ignore the payload as the experiments shown that it isn't an
+interesting source of data - we can get the same entropy by just
+looking at the ordering of SSL extensions.
+
+
+A special explanation should be given for '0' - 'server_name' SSL
+extension. This extension contains a host name of a remote host and is
+often described as Server Name Indication TLS extension from RFC 3546.
+
+Unfortunately RFC forbids passing raw ip addresses in this
+option. That means this option must not be present if you enter a
+website using an ip address. For example, browser will valid extension
+'0' with hostname if you access 'https://localhost' but will not for
+'https://127.0.0.1'.
+
+P0f assumes that this extension is optional and will always prepend it
+with an optional sign '?'. This is quite optimistic and may not always
+be a good idea - it is possible the fingerprint when accessing
+'localhost' is completely different from '127.0.0.1'. Using '?' before
+this extension will only clutter a signature in such case.
