@@ -1,3 +1,19 @@
+Version 3.05b:
+--------------
+
+Bug fixes:
+
+  - Cleaned up hash.h to avoid pointless OOB reads, alignment issues.
+
+  - Fixed divide-by-zero in MSS calculations
+
+Version 3.04b:
+--------------
+
+Bug fixes:
+
+  - Fixed a realloc bug (not normally triggered in p0f)
+
 Version 3.03b:
 --------------
 
