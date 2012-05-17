@@ -1,4 +1,3 @@
-/* -*-mode:c; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
 /*
    p0f - p0f.fp file parser
    ------------------------
