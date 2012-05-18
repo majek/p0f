@@ -757,6 +757,7 @@ sig = sslver:ciphers:extensions:sslflags
                rtime - gmt_unix_time field has value that is very far off
                        local time, most likely it is random
                compr - client supports deflate compression
+               rand  - supposedly random data doesn't look randomly
 
                NEW SIGNATURES: Copy literally.
 

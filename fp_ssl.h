@@ -33,6 +33,7 @@
 #define SSL_FLAG_STIME 0x0008  /* small SSL time, (absolute value < 1 year)
                                   most likely time since reboot for old ff */
 #define SSL_FLAG_COMPR 0x0010  /* Deflate compression support. */
+#define SSL_FLAG_RAND  0x0020  /* Random data doesn't look randomly. */
 
 
 /* SSLv2 */

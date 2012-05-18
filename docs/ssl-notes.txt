@@ -66,8 +66,9 @@ SSL handshake (ClientHello message) contains following fields:
                field is set to a random value. This was seen in some
                SSL crawlers.
 
- * 28 random bytes - not very useful. In a debug build a warning will
-   be printed if the values don't look very randomly.
+ * 28 random bytes - not very useful. A flag is set:
+      'rand' - when the values don't look very randomly (0x00000000 or
+               0xffffffff found in the supposedly random block)
 
  * session_id - a client may choose to resume previous SSL session. Ignored.
 

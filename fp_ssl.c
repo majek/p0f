@@ -45,6 +45,7 @@ struct flag flags[] = {{"compr", 5, SSL_FLAG_COMPR},
                        {"ver",   3, SSL_FLAG_VER},
                        {"rtime", 5, SSL_FLAG_RTIME},
                        {"stime", 5, SSL_FLAG_STIME},
+                       {"rand",  4, SSL_FLAG_RAND},
                        {NULL, 0, 0}};
 
 
@@ -412,14 +413,13 @@ static int fingerprint_ssl_v3(struct ssl_sig* sig, const u8* fragment,
   }
 
   /* Random */
-  u16* random = (u16*)pay;
+  u32* random = (u32*)pay;
   pay += 28;
 
-  for (i = 0; i < 14; i++) {
-    if (random[i] == 0x0000 || random[i] == 0xffff) {
+  for (i = 0; i < 7; i++) {
+    if (random[i] == 0x00000000 || random[i] == 0xffffffff) {
 
-      DEBUG("[#] SSL 0x%04x found in allegedly random blob at offset %i.\n",
-            random[i], i);
+      sig->flags |= SSL_FLAG_RAND;
       break;
 
     }
