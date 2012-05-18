@@ -58,7 +58,7 @@ SSL handshake (ClientHello message) contains following fields:
 
  * gmt_unix_time - a timestamp from the client. In the code we may
    set one of two flags derived from this value:
-     'stime' - when the timestamp is unnaturally small (less than one year 
+     'stime' - when the timestamp is unnaturally small (less than one year
                since the epoch). This is behaviour was seen in old Firefox
                releases, when gmt_unix_time is set to seconds since boot.
      'rtime' - when the timestamp is far off the current value (delta
@@ -78,7 +78,7 @@ SSL handshake (ClientHello message) contains following fields:
 
  * compression_methods - a list of supported compression methods. There
    is only one valid compression method available, so we set a flag:
-       'compr' - if compression is enabled 
+       'compr' - if compression is enabled
 
  * extensions - a list of SSL extensions. Second, after cipher_suites,
    major source of data. For exact meaning refer to:

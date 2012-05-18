@@ -239,7 +239,7 @@ static void ssl_find_match(struct ssl_sig* ts) {
 }
 
 
-/* Unpack SSLv2 header to a signature. 
+/* Unpack SSLv2 header to a signature.
    -1 on parsing error, 1 if signature was extracted. */
 
 static int fingerprint_ssl_v2(struct ssl_sig* sig, const u8* pay, u32 pay_len) {
