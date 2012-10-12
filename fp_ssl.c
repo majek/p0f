@@ -46,6 +46,7 @@ struct flag flags[] = {{"compr", 5, SSL_FLAG_COMPR},
                        {"rtime", 5, SSL_FLAG_RTIME},
                        {"stime", 5, SSL_FLAG_STIME},
                        {"rand",  4, SSL_FLAG_RAND},
+                       {"chlen", 5, SSL_FLAG_CHLEN},
                        {NULL, 0, 0}};
 
 
@@ -293,6 +294,21 @@ static int fingerprint_ssl_v2(struct ssl_sig* sig, const u8* pay, u32 pay_len) {
 
   u16 session_id_len = ntohs(hdr->session_id_length);
   u16 challenge_len = ntohs(hdr->challenge_length);
+
+  /* Although SSLv2 states that challenge must be between 16 and 32
+     bytes long, in practice no other values were recorded. 32 seems
+     to be more popular than 16. */
+
+  if (challenge_len != 32) {
+
+    sig->flags |= SSL_FLAG_CHLEN;
+
+    if (challenge_len != 16) {
+      DEBUG("[#] SSLv2 challenge_len %i req_ver=%04x\n", challenge_len,
+            sig->request_version);
+    }
+
+  }
 
   if (pay + session_id_len + challenge_len > pay_end) {
 

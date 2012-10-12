@@ -34,6 +34,7 @@
                                   most likely time since reboot for old ff */
 #define SSL_FLAG_COMPR 0x0010  /* Deflate compression support. */
 #define SSL_FLAG_RAND  0x0020  /* Random data doesn't look randomly. */
+#define SSL_FLAG_CHLEN 0x0040  /* SSLv2 challenge is not 16 bytes */
 
 
 /* SSLv2 */
