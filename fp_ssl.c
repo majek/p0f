@@ -302,7 +302,22 @@ static int fingerprint_ssl_v2(struct ssl_sig* sig, const u8* pay, u32 pay_len) {
 
   }
 
-  pay += session_id_len + challenge_len;
+  pay += session_id_len;
+
+  u32 i;
+  u32* challenge = (u32*)pay;
+
+  for (i = 0; i < challenge_len/4; i++) {
+    if (challenge[i] == 0x00000000 || challenge[i] == 0xffffffff) {
+
+      sig->flags |= SSL_FLAG_RAND;
+      break;
+
+    }
+  }
+
+
+  pay += challenge_len;
 
   if (pay != pay_end) {
 
