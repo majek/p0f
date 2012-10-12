@@ -296,7 +296,8 @@ static int fingerprint_ssl_v2(struct ssl_sig* sig, const u8* pay, u32 pay_len) {
 
   if (pay + session_id_len + challenge_len > pay_end) {
 
-    DEBUG("[#] SSLv2 frame truncated (but valid)\n");
+    DEBUG("[#] SSLv2 frame truncated (but valid) req_ver=%04x\n",
+          sig->request_version);
     goto truncated;
 
   }
@@ -353,6 +354,9 @@ static int fingerprint_ssl_v3(struct ssl_sig* sig, const u8* fragment,
      not for us. */
 
   if (pay_end > frag_end) {
+    /* I've seen a packet which looked like fragmented, but upon
+       inspection I noticed that 4th byte of data had been cleared
+       (high bits of frame length). Weird, ain't? */
 
     DEBUG("[#] SSL Fragment coalescing not supported - %u bytes requested.\n",
           pay_end - frag_end);
@@ -370,7 +374,7 @@ static int fingerprint_ssl_v3(struct ssl_sig* sig, const u8* fragment,
        I guess we can assume that the first frame must be ClientHello.
     */
 
-    DEBUG("[#] SSL First message type 0x%02x (%u bytes) not supported.\n",
+    DEBUG("[#] SSL Message type 0x%02x (%u bytes) is not ClientHello.\n",
           msg->message_type, msg_len);
     return -1;
 
@@ -407,7 +411,7 @@ static int fingerprint_ssl_v3(struct ssl_sig* sig, const u8* fragment,
     /* More than 5 years difference - most likely random */
     sig->flags |= SSL_FLAG_RTIME;
 
-    DEBUG("[#] SSL timer looks wrong: drift=%lld remote_time=%u.\n",
+    DEBUG("[#] SSL timer looks random: drift=%lld remote_time=%u.\n",
           drift, sig->remote_time);
 
   }
@@ -482,10 +486,15 @@ static int fingerprint_ssl_v3(struct ssl_sig* sig, const u8* fragment,
 
   if (pay + 2 > pay_end) {
 
-    /* Extensions are optional in SSLv3. This behaviour was considered
-       as a flag, but it doesn't bring any entropy. In other words:
-       noone who is able to send extensions sends an empty list.  An
-       empty list of extensions is equal to SSLv2 or this branch. */
+    /* SSL 3.0 and all versions of TLS allow the ClientHello message
+       to be truncated after compression_methods and not specify
+       extensions field at all. Although rarely, this does seem to
+       occur in real world. Semantically it is no different to sending
+       an empty list of extensions. In fact, no client was ever
+       recorded to send an empty list of extensions if the extensions
+       field was present. In other words - if the extensions field is
+       empty you can assume the ClientHello packet was truncated after
+       compression_methods. */
     goto truncated_ok;
 
   }
@@ -547,7 +556,8 @@ static int fingerprint_ssl_v3(struct ssl_sig* sig, const u8* fragment,
   if (0) {
 truncated:
 
-    DEBUG("[#] SSL packet truncated (but valid).\n");
+    DEBUG("[#] SSL packet truncated (but valid) req_ver=%04x rec_ver=%04x\n",
+          sig->request_version, record_version);
 
   }
 truncated_ok:
