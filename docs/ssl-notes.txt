@@ -2,100 +2,130 @@
 SSL fingerprinting
 ==================
 
-Not many people realise that the unencrypted SSL / TLS handshake
-(ClientHello message) reveals some fingerprintable details about the
-client.
+The first message of an SSL/TLS connection, ClientHello, contains some
+data that could be used to identify the client. P0f SSL code creates a
+fingerprint from this packet.
 
-For a given application using SSL it is possible to fingerprint
-underlying SSL library. In many cases it is even possible to pinpoint
-specific application version.
+For a given ClientHello message sometimes it is possible to identify
+underlying SSL library. For applications which include a custom build
+of an SSL library it may be even possible to pinpoint a specific
+application version. For example some web browsers do it. Additionally
+browsers selectively support newly introduced SSL features like SPDY,
+ECC or 'renegotiation info' extension making it easier to distinguish
+one from another.
 
-This especially true in the browser world, where the SSL libraries are
-most often bundled with a release. Additionally, on the web a lot of
-innovation happens on SSL layer, like SPDY, ECC or 'renegotiation
-info' extension.
+SSL connections are usually directly forwarded by proxies without
+mangling. In most cases SSL fingerprint comes straight from a genuine
+application and is not affected by NAT or any specific network
+configuration.
 
-Additionally SSL traffic is unharmed by proxies or routers, we can
-have high confidentiality that the SSL fingerprint does identify a
-genuine application. This is useful for detecting NAT's.
+Although initial frames sent from both SSL client and the server are
+similar, only the one sent by the client (ClientHello) can be
+passively fingerprinted. The packet from server (ServerHello) doesn't
+contain enough information. If you wish to fingerprint an SSL server
+an active fingerprinting tool is more suitable [1].
 
-Although initial frames sent from both SSL client and server are
-similar, only frame sent by the client 'ClientHello', can be passively
-fingerprinted. The server frame 'ServerHello' doesn't have enough
-information. If you wish to fingerprint SSL servers an active
-fingerprinting tool may be more suitable.
+Passively fingerprinting SSL is not a new idea, initial work was done
+in mid 2009 by Ivan Ristic [2]. He was able to collect a few dozen
+interesting signatures [3]. Unfortunately in his work he had ignored
+the SSL extensions which add a lot of information. Especially the
+ordering of extensions has high value, similarly to the TCP options
+ordering for TCP/IP stack fingerprinting.
+
+  [1] http://nmap.org/nsedoc/scripts/ssl-enum-ciphers.html
+  [2] https://www.ssllabs.com/projects/client-fingerprinting/
+  [3] http://blog.ivanristic.com/2009/07/examples-of-the-information-collected-from-ssl-handshakes.html
+
+References to SSL/TLS specs:
+
+ * SSL 2.0: http://www.mozilla.org/projects/security/pki/nss/ssl/draft02.html
+ * SSL 3.0: http://tools.ietf.org/html/rfc6101
+ * TLS 1.0: http://tools.ietf.org/html/rfc2246
+ * TLS 1.1: http://tools.ietf.org/html/rfc4346
+ * TLS 1.2: http://tools.ietf.org/html/rfc5246
 
 
-Fingerprinting SSL is not a new idea, initial work was done in mid
-2009 by Ivan Ristic:
+SSL fingerprint structure
+=========================
 
- * https://www.ssllabs.com/projects/client-fingerprinting/
+SSL fingerprint is generated from ClientHello SSL/TLS data. It's a
+semicolon delimited string with layout as follows:
 
-He was able to collect few dozen interesting signatures:
+    ssl version : ciphers list : extensions list : flags
 
- * http://blog.ivanristic.com/2009/07/examples-of-the-information-collected-from-ssl-handshakes.html
+For example a generated fingerprint might look like:
 
-Unfortunately on his works he seem to have totally ignored the SSL
-extensions list, which add valuable information to a
-fingerprint. Especially the ordering of extensions has high value,
-similarly to the TCP options ordering for TCP/IP stack fingerprinting.
+    3.1:39,38,88,87,35,84,16,13,a,33,32,9a,99,45,44,2f,96,41,5,4,ff:23:compr
+
+This reads:
+
+1) Client requests TLS 1.0 (value 3.1), using SSL 3.0+ record format
+   (flag 'v2' is _not_ set), with 'request' layer SSL version equal to
+   'record' layer version (flag 'ver' is _not_ set).
+2) Client supports ciphers, in order:
+    39,38,88,87,35,84,16,13,a,33,32,9a,99,45,44,2f,96,41,5,4,ff
+3) Client used only a single extension: 0x23 (SessionTicket TLS)
+4) Client supports deflate compression (flag 'compr' is set).
+5) Random blob looks legitimate (flag 'rand' is _not_ set).
+6) Unix time reported by the client looks legitimate (flags 'stime'
+   and 'rtime' are _not_ set).
 
 
-SSL handshake (ClientHello message) contains following fields:
+ClientHello message structure
+=============================
+
+SSL client handshake (ClientHello message) contains following fields:
 
  * SSL record version - browsers usually use version 3, Ivan Ristic
-   research shows that web crawlers (including wget) still use 2.
-   We set a flag:
-     'v2'  - if request is SSL version 2
+   showed that older clients and web crawlers (including wget) still
+   use SSL 2 packet format. Flag 'v2' is set in that case.
 
- * Requested SSL protocol version - most likely 3.1. Less likely values
-   are 3.0 and 3.2. SSL crawlers trying invalid versions like 4.2 were
-   seen in the wild. ('request_version')
-   We set a flag:
-     'ver' - if, for SSL version 3, the version on a 'request' layer
-             is different than on 'record' layer. This behaviour was seen
-             in Opera.
+ * Requested SSL protocol version - most likely 3.1 (TLS 1.0). Less
+   likely values are 3.0 (SSL 3.0) and 3.2 (TLS 1.1). SSL crawlers may
+   try invalid versions like 4.2. We set a flag:
 
- * gmt_unix_time - a timestamp from the client. In the code we may
-   set one of two flags derived from this value:
-     'stime' - when the timestamp is unnaturally small (less than one year
-               since the epoch). This is behaviour was seen in old Firefox
-               releases, when gmt_unix_time is set to seconds since boot.
+     'ver' - if, for SSLv3 / TLS handshake, the version on a 'request'
+             layer is different than on 'record' layer. This behaviour
+             was seen in Opera.
+
+ * Current unix timestamp from the client. In the code we may set one
+   of two flags derived from this value:
+
+     'stime' - when the timestamp is too small (less than one year
+               since the epoch). This is behaviour was seen in
+               Firefox 2.X, when this value is set to the number of
+               seconds since boot.
+
      'rtime' - when the timestamp is far off the current value (delta
-               is bigger than 5 years). Most often this means that gmt_unix_time
-               field is set to a random value. This was seen in some
-               SSL crawlers.
+               is greater than 5 years). Most often this means that
+               the field is set to a random value. This was seen in
+               some SSL crawlers.
 
  * 28 random bytes - not very useful. A flag is set:
+
       'rand' - when the values don't look very randomly (0x00000000 or
                0xffffffff found in the supposedly random block)
 
- * session_id - a client may choose to resume previous SSL session. Ignored.
+ * session_id - ignored.
 
- * cipher_suites - a list of supported encryption algorithms ('ciphers').
-   For the meaning of the numbers refer to:
-       http://www.iana.org/assignments/tls-parameters/tls-parameters.xml#tls-parameters-3
+ * cipher_suites - a list of supported encryption algorithms
+   ('ciphers').  Iana maintains a list of valid values [4].
 
- * compression_methods - a list of supported compression methods. There
-   is only one valid compression method available, so we set a flag:
-       'compr' - if compression is enabled
+ * compression_methods - a list of supported compression
+   methods. There is only one valid compression method available, we
+   set 'compr' flag if compression is enabled
 
- * extensions - a list of SSL extensions. Second, after cipher_suites,
-   major source of data. For exact meaning refer to:
-        http://www.iana.org/assignments/tls-extensiontype-values/tls-extensiontype-values.xml
+ * extensions - a list of SSL extensions. Second, after
+   'cipher_suites', major source of entropy. Iana maintains the list
+   of valid extensions [5].
 
-
-It's worth noting that SSL extensions contain not only a list of
-supported extensions but also optional payload for every extension.
-We ignore the payload as the experiments shown that it isn't an
-interesting source of data - we can get the same entropy by just
-looking at the ordering of SSL extensions.
-
+It's worth noting that SSL extensions may contain a payload data for
+every extension.  We ignore that - it doesn't seem to provide any more
+entropy than by just looking at the order of SSL extensions.
 
 A special explanation should be given for '0' - 'server_name' SSL
 extension. This extension contains a host name of a remote host and is
 often described as Server Name Indication TLS extension from RFC 3546.
-
 Unfortunately RFC forbids passing raw ip addresses in this
 option. That means this option must not be present if you enter a
 website using an ip address. For example, browser will valid extension
@@ -107,3 +137,6 @@ with an optional sign '?'. This is quite optimistic and may not always
 be a good idea - it is possible the fingerprint when accessing
 'localhost' is completely different from '127.0.0.1'. Using '?' before
 this extension will only clutter a signature in such case.
+
+  [4] http://www.iana.org/assignments/tls-parameters/tls-parameters.xml#tls-parameters-3
+  [5] http://www.iana.org/assignments/tls-extensiontype-values/tls-extensiontype-values.xml

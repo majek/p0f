@@ -717,7 +717,7 @@ getting more than enough information just with a simple GET / HEAD fingerprint.
 
 P0f is capable of fingerprinting SSL / TLS requests. This can be used
 to verify if a browser using https is legitimate, and in some cases
-can leak some details about client operating system.
+can reveal some details about the client's operating system.
 
 SSL signatures have the following layout:
 
@@ -731,27 +731,27 @@ sig = sslver:ciphers:extensions:sslflags
   ciphers    - comma-separated list of hex values representing SSL
                ciphers supported by the client.
 
-               NEW SIGNATURES: Review the list and feel free to
-               substitute parts that bring no information with the
-               match all sign '*'.  For efficiency avoid using star in
-               the beginning of the signature.
+               NEW SIGNATURES: Review the list and substitute boring
+               parts that don't bring newq information with the 'match
+               all' sign '*'. For efficiency don't use star at the
+               beginning of the signature.
 
-               You may also use '?' to make particular value optional.
+               You may also use '?' to make a single value optional.
 
-  extensions - comma-separated list of hex values representing
-               SSL extensions.
+  extensions - comma-separated list of hex values representing SSL
+               extensions.
 
                NEW SIGNATURES: Same as for ciphers.
 
-  sslflags   - comma-separated list of SSL flags:
+  sslflags   - comma-separated list of SSL flags. SSLv2 flags:
 
-               v2    - client used an older SSLv2 handshake frame, instead
-                       of more recent SSLv3 / TLSv1
+               v2    - client used an SSLv2 handshake
+               chlen - challenge data is not 32 bytes long
 
                Flags specific to SSLv3 handshake:
 
-               ver   - requested SSL protocol was different on a protocol
-                       (request) than on a record layer
+               ver   - SSL protocol on a request layer was different
+                       than on a record layer
                stime - gmt_unix_time field has unusually was small value,
                        most likely time since boot
                rtime - gmt_unix_time field has value that is very far off
@@ -961,6 +961,7 @@ including:
   Jeff Weisberg
   Anthony Howe
   Tomoyuki Murakami
+  Marek Majkowski
 
 If you wish to help, the most immediate way to do so is to simply gather new
 signatures, especially from less popular or older platforms (servers, networking
