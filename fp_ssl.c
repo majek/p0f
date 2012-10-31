@@ -511,7 +511,7 @@ static int fingerprint_ssl_v3(struct ssl_sig* sig, const u8* fragment,
     } else {
       if (pay[0] || pay + 1 != tmp_end)
         DEBUG("[#] SSL unknown compression method 0x%x at offset %i/%i.\n",
-              pay[0], pay-tmp_end, compression_methods_len);
+              pay[0], tmp_end - pay, compression_methods_len);
     }
 
     pay += 1;
