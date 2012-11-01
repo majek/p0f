@@ -366,7 +366,7 @@ too_short:
  message.  -1 on parsing error, 1 if signature was extracted. */
 
 static int fingerprint_ssl_v3(struct ssl_sig* sig, const u8* fragment,
-                              u32 frag_len, u16 record_version, u32 local_time) {
+                              u32 frag_len, u16 record_version) {
 
   int i;
   const u8* frag_end = fragment + frag_len;
@@ -429,7 +429,6 @@ static int fingerprint_ssl_v3(struct ssl_sig* sig, const u8* fragment,
   sig->remote_time = ntohl(*((u32*)pay));
   pay += 4;
 
-  sig->recv_time = local_time;
   s64 drift = ((s64)sig->recv_time) - sig->remote_time;
 
   if (sig->remote_time < 1*365*24*60*60) {
@@ -916,6 +915,7 @@ u8 process_ssl(u8 to_srv, struct packet_flow* f) {
     if (f->req_len < 2 + msg_length) return can_get_more;
 
     memset(&sig, 0, sizeof(struct ssl_sig));
+    sig.recv_time = f->client->last_seen;
     sig.flags |= SSL_FLAG_V2;
 
     success = fingerprint_ssl_v2(&sig, f->request, msg_length + 2);
@@ -937,13 +937,12 @@ u8 process_ssl(u8 to_srv, struct packet_flow* f) {
       return can_get_more;
 
     memset(&sig, 0, sizeof(struct ssl_sig));
+    sig.recv_time = f->client->last_seen;
     u16 record_version = (hdr3->ver_maj << 8) | hdr3->ver_min;
 
     u8* fragment = f->request + sizeof(struct ssl3_record_hdr);
 
-    success = fingerprint_ssl_v3(&sig, fragment, fragment_len,
-                                 record_version,
-                                 f->client->last_seen);
+    success = fingerprint_ssl_v3(&sig, fragment, fragment_len, record_version);
 
   }
 
