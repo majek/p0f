@@ -918,13 +918,13 @@ sig   = *:Content-Type,X-Content-Type-Options=[nosniff],Server=[GSE]:Connection,
 label = s:!:any:MSIE or Safari on Windows XP
 sys   = Windows
 sig   = 3.1:4,5,a,9,64,62,3,6,13,12,63:ff01:
-; no MS10-049 applied?
-sig   = 3.1:4,5,a,9,64,62,3,6,13,12,63::
+; no MS10-049 applied
+sig   = 3.1:4,5,a,9,64,62,3,6,13,12,63,?ff::
+sig   = 3.0:4,5,a,9,64,62,3,6,13,12,63,?ff::
 
 ; with some SSL/TLS options tweaked
-sig   = 3.0:4,5,a,9,64,62,3,6,13,12,63,ff::
-sig   = 3.0:4,5,a,10080,700c0,30080,9,60040,64,62,3,6,20080,40080,13,12,63,ff::v2
-sig   = 2.0:10080,700c0,30080,60040,20080,40080,ff::v2
+sig   = 3.0:4,5,a,10080,700c0,30080,9,60040,64,62,3,6,20080,40080,13,12,63,?ff::v2,chlen
+sig   = 2.0:10080,700c0,30080,60040,20080,40080,ff::v2,chlen
 
 
 ; Windows NT 6.0 (Vista)
@@ -932,19 +932,23 @@ label = s:!:any:MSIE 5.5-6 or Chrome 1-4 or Safari on Windows Vista
 sys   = Windows
 sig   = 3.1:2f,35,5,a,c009,c00a,c013,c014,32,38,13,4:?0,a,b,ff01:
 
-label = s:!:any:MSIE 7.0-9.0 or Chrome 5 on Windows Vista
+label = s:!:any:MSIE 7-9 or Chrome 5 on Windows Vista
 sys   = Windows
 sig   = 3.1:2f,35,5,a,c009,c00a,c013,c014,32,38,13,4:?0,5,a,b,ff01:
+
 
 
 ; Windows NT 6.1 (7)
 label = s:!:MSIE:7-9 on Windows 7
 sys   = Windows
 sig   = 3.1:2f,35,5,a,c013,c014,c009,c00a,32,38,13,4:ff01,?0,5,a,b:
+; Weird IE9 on win 7: MSIE 9.0; Windows NT 6.1
+sig   = 3.0:5,a,13,4,10080,700c0,?ff::v2,chlen
 
 label = s:!:Safari:on Windows 7
 sys   = Windows
 sig   = 3.1:2f,35,5,a,c013,c014,c009,c00a,32,38,13,4:ff01,?0,a,b:
+
 
 ; Windows NT 6.2 ( 8)
 ; 23 usually means NT 6.2
@@ -952,7 +956,7 @@ label = s:!:MSIE:10 on Windows 8
 sys   = Windows
 sig   = 3.1:2f,35,5,a,c013,c014,c009,c00a,32,38,13,4:ff01,?0,5,a,b,23:
 
-label = s:!:Safari:Safari on Windows 8
+label = s:!:Safari:on Windows 8
 sys   = Windows
 sig   = 3.1:2f,35,5,a,c013,c014,c009,c00a,32,38,13,4:ff01,?0,a,b,23:
 
@@ -961,14 +965,24 @@ sig   = 3.1:2f,35,5,a,c013,c014,c009,c00a,32,38,13,4:ff01,?0,a,b,23:
 ; Chrome
 ; ------
 
-label = s:!:Chrome:6 or newer
+; old chrome - TLS 1.0
+label = s:!:Chrome:6-20
 sys   = Windows,@unix
-sig   = 3.1:c00a,c014,88,87,39,38,c00f,*,c003,feff,a:?0,ff01,a,b,23:compr
-sig   = 3.1:c00a,c014,88,87,39,38,c00f,*,c003,feff,a:?0,ff01,a,b,23,3374:compr
-; 5 is on on windows
-sig   = 3.1:c00a,c014,88,87,39,38,c00f,*,c003,feff,a:?0,ff01,a,b,23,3374,5:compr
+sig   = 3.1:c00a,c014,88,87,39,38,c00f,*,45,44,66,33,32,*,c003,feff,a:?0,ff01,a,b,23,?3374,?5:compr
 
-label = s:!:Chrome:degraded to SSLv3.0
+; newer chrome - TLS 1.1
+label = s:!:Chrome:21
+sys   = Windows,@unix
+sig   = 3.2:c00a,c014,88,87,39,38,c00f,*,45,44,66,33,32,*,c003,feff,a:?0,ff01,a,b,23,?3374,?5:compr
+
+; newest chrome - no compr support
+label = s:!:Chrome:22 or newer
+sys   = Windows,@unix
+sig   = 3.2:c00a,c014,88,87,39,38,c00f,*,45,44,66,33,32,*,c003,feff,a:?0,ff01,a,b,23,?3374,?5:
+sig   = 3.2:c00a,c014,88,87,39,38,c00f,*,45,44,66,33,32,*,c003,feff,a:?0,ff01,a,b,23,?3374,?5:ver
+
+
+label = s:!:Chrome:degraded to SSL v3.0
 sys   = Windows,@unix
 sig   = 3.0:ff,88,87,39,38,84,35,45,44,66,33,32,96,41,4,5,2f,16,13,feff,a::
 
@@ -978,7 +992,7 @@ sig   = 3.0:ff,88,87,39,38,84,35,45,44,66,33,32,96,41,4,5,2f,16,13,feff,a::
 
 label = s:!:Firefox:1.X
 sys   = Windows,@unix
-sig   = 3.1:10080,30080,*,40080,39,38,35,*,64,62,3,6::v2
+sig   = 3.1:10080,30080,*,40080,39,38,35,*,64,62,3,6::v2,chlen
 sig   = 3.1:39,38,35,*,64,62,3,6::stime
 
 label = s:!:Firefox:2.X
@@ -992,27 +1006,31 @@ sig   = 3.1:c00a,c014,88,87,39,38,c00f,c005,84,35,c007,*,c003,feff,a:?0,a,b,23:
 label = s:!:Firefox:3.6.X
 sys   = Windows,@unix
 sig   = 3.1:ff,c00a,c014,88,87,38,c00f,c005,84,35,39,*,c00d,c003,feff,a:?0,a,b,23:
+sig   = 3.0:88,87,38,84,35,39,45,44,33,32,96,41,4,5,2f,16,13,feff,a,ff::v2,chlen
 
-label = s:!:Firefox:4-11
+label = s:!:Firefox:4-12
 sys   = Windows,@unix
-sig   = 3.1:ff,c00a,c014,88,87,39,38,*,c003,feff,a:?0,a,b,23:
-; with SSLv2 disalbed
-sig   = 3.1:c00a,c014,88,87,39,38,*,c003,feff,a:?0,ff01,a,b,23:
+sig   = 3.1:?ff,c00a,c014,88,87,39,38,c00f,c005,*,c003,feff,a:?0,?ff01,a,b,23:
 
 label = s:!:Firefox:11 (TOR)
 sys   = Windows,@unix
 ; Lack of a single extension (SessionTicket TLS) is not a very strong signal.
 sig   = 3.1:ff,c00a,c014,88,87,39,38,*,c003,feff,a:?0,a,b:
 
-label = s:!:Firefox:14 or newer
+label = s:!:Firefox:13 or newer
 sys   = Windows,@unix
-sig   = 3.1:ff,c00a,c014,88,87,39,38,*,c003,feff,a:?0,a,b,23,3374:
+sig   = 3.1:ff,c00a,c014,88,87,39,38,*,45,44,33,32,*,c003,feff,a:?0,a,b,23,3374:
 
 ; with TLS switched off
 label = s:!:Firefox:3.6.X or newer
 sys   = Windows,@unix
-sig   = 3.0:ff,88,87,39,38,84,35,45,44,33,32,96,41,4,5,2f,16,13,feff,a::
 
+; Catch all - suspects:
+label = s:!:Firefox:
+sys   = Windows,@unix
+sig   = 3.0:?ff,88,87,39,38,84,35,45,44,33,32,96,41,4,5,2f,16,13,feff,a:?0,?23,?3374:
+; no clue what 66 stands for
+sig   = 3.0:?ff,88,87,39,38,84,35,45,44,66,33,32,96,41,5,4,2f,16,13,feff,a:?0,?23,?3374:
 
 ; ------
 ; Safari
@@ -1021,7 +1039,7 @@ sig   = 3.0:ff,88,87,39,38,84,35,45,44,33,32,96,41,4,5,2f,16,13,feff,a::
 label = s:!:Safari:4.X
 sys   = Mac OS X
 sig   = 3.1:2f,5,4,35,a,ff83,*,17,19,1::
-sig   = 3.1:2f,5,4,35,a,ff83,*,17,19,1,10080,*,700c0::v2
+sig   = 3.1:2f,5,4,35,a,ff83,*,17,19,1,10080,*,700c0::v2,chlen
 
 label = s:!:Safari:5.1.2
 sys   = Mac OS X
@@ -1031,16 +1049,20 @@ label = s:!:Safari:5.1.3 or newer
 sys   = Mac OS X
 sig   = 3.1:c00a,c009,c007,c008,c013,*,33,38,39,16,13:?0,a,b:
 
+; confirmed on 5.0.6
+label = s:!:Safari:5.x
+sys   = Mac OS X
+sig   = 3.1:2f,5,4,35,a,9,3,8,6,32,33,38,39,16,15,14,13,12,11:?0:
+label = s:!:Safari:6.x on Mac OS X 10.8.2+
+sys   = Mac OS X
+sig   = 3.1:ff,c00a,c009,c007,c008,c014,c013,*,c00d,2f,5,4,35,a,33,39,16:?0,a,b:
+
 
 ; -------
 ; Android
 ; -------
 
 ; in http Android is treated as Linux, oh, well...
-label = s:!:Android:1.5-2.1
-sys   = Linux
-sig   = 3.1:39,38,35,16,13,a,33,32,2f,5,4,15,12,9,14,11,8,6,3::
-
 label = s:!:Android:2.3
 sys   = Linux
 sig   = 3.1:4,5,2f,33,32,a,16,13,9,15,12,3,8,14,11,ff::
@@ -1052,6 +1074,7 @@ sig   = 3.1:c014,c00a,39,38,c00f,c005,35,*,c00c,c002,5,4,15,12,9,14,11,8,6,3,ff:
 label = s:!:Android:4.X
 sys   = Linux
 sig   = 3.1:c014,c00a,39,38,c00f,c005,35,*,c00c,c002,5,4,ff:?0,b,a,23,3374:compr
+sig   = 3.1:c014,c00a,39,38,88,87,c00f,c005,35,*,c009,33,32,45,44,c00e,c004,2f,41,c011,c007,c00c,c002,5,4,ff:?0,b,a,23,3374:
 
 ; -----------
 ; iPhone iPad
@@ -1065,6 +1088,10 @@ label = s:!:Safari:iOS 5.X
 sys   = iOS
 sig   = 3.3:ff,c024,c023,c00a,*,33,39,16:?0,a,b,d:
 
+label = s:!:Safari:iOS 6.X
+sys   = iOS
+sig   = 3.3:ff,c024,c023,c00a,*,33,39,16,c006,c010,c001,c00b,3b,2,1:?0,a,b,d:
+
 
 ; ------------
 ; Weird Mobile
@@ -1074,10 +1101,14 @@ sys   = Windows,@unix
 sig   = 3.1:39,38,37,36,35,33,32,31,30,2f,5,4,13,d,16,10,a:?0,ff01,5:
 sig   = 3.1:ff,39,38,37,36,35,33,32,31,30,2f,5,4,13,d,16,10,a:?0,ff01,5:
 
-label = s:!:HP-tablet:unknown
+label = s:!:HP-tablet:
 sys   = Touchpad
 sig   = 3.1:39,38,35,16,13,a,33,32,2f,5,4:?0:
 
+; Confirmed on version 6.0
+label = s:!:Blackberry:
+sys   = Blackberry
+sig   = 3.1:33,32,2f,39,38,35,5,4,16,13,a,15,12,9,3,14,11,8,?ff::
 
 ; -----
 ; Opera
@@ -1115,23 +1146,35 @@ sig   = 3.2:2f,5,4,a,35,32,66,13,38,33,16,39,34,18,1b,3a,3::
 sig   = 3.3:3c,2f,5,4,a,3d,35,40,32,66,13,6a,38,67,33,16,6b,39,6c,34,18,1b,6d,3a:ff01,d:
 sig   = 3.1:*,2f,5,4,a,*,35,*,18,1b,3a,*:*:
 
-
 label = g:!:openssl:
 sys   = @unix
-sig   = 3.1:39,38,35,16,13,a,33,32,2f,5,4,15,12,9,14,11,8,6,3,ff:23:compr
-sig   = 3.1:39,38,35,16,13,a,33,32,2f,5,4,15,12,9,14,11,8,6,3,ff:?0:compr
-sig   = 3.1:39,38,35,16,13,a,33,32,2f,5,4,15,12,9,14,11,8,6,3,ff:?0,23:
-sig   = 3.1:39,38,35,16,13,a,33,32,2f,9a,99,96,5,4,15,12,9,14,11,8,6,3,ff:?0,23:compr
-sig   = 3.1:39,38,35,16,13,a,33,32,2f,9a,99,96,5,4,15,12,9,14,11,8,6,3,ff:?0:compr
+
+; This was seen on old Android 1.5-2
+sig   = 3.1:39,38,35,16,13,a,33,32,2f,5,4,15,12,9,14,11,8,6,3::
+
+; Observed:
+sig   = 3.1:39,38,35,16,13,a,33,32,2f,5,4,15,12,9,14,11,8,6,3,ff:?0,?23:
+sig   = 3.1:39,38,35,16,13,a,33,32,2f,5,4,15,12,9,14,11,8,6,3,ff:?0,?23:compr
+sig   = 3.1:39,38,35,16,13,a,33,32,2f,9a,99,96,5,4,15,12,9,14,11,8,6,3,ff:?0,?23:compr
 
 ; darwin
 sig   = 3.1:39,38,35,16,13,a,700c0,33,32,2f,9a,99,96,30080,5,4,10080,15,12,9,60040,14,11,8,6,40080,3,20080,ff::v2
 sig   = 3.1:39,38,35,16,13,a,700c0,33,32,2f,30080,5,4,10080,15,12,9,60040,14,11,8,6,40080,3,20080,ff::v2
+sig   = 3.1:39,38,35,16,13,a,700c0,33,32,2f,30080,5,4,10080,15,12,9,60040,14,11,8,6,40080,3,20080,ff::v2,chlen
 
 sig   = 3.1:39,38,88,87,35,84,16,13,a,33,32,9a,99,45,44,2f,96,41,5,4,15,12,9,14,11,8,6,3,ff:23:compr
 sig   = 3.1:c014,c00a,39,38,88,87,c00f,c005,35,84,*,8,6,3,ff:b,a,23:compr
 sig   = 3.1:c014,c00a,39,38,88,87,c00f,c005,35,84,*,8,6,3,ff:?0,b,a:compr
 
-label = s:!:Epiphany:2.X
+; wget on ubuntu
+sig   = 3.2:c014,c00a,c022,c021,39,38,88,87,c00f,c005,35,84,*,14,11,8,6,3,ff:b,a,23,f:compr,ver
+; curl on ubuntu
+sig   = 3.2:c014,c00a,c022,c021,39,38,88,87,c00f,c005,35,84,*,14,11,8,6,3,ff:?0,b,a,f:compr,ver
+
+label = s:!:Epiphany:
 sys   = Linux
+; epiphany 2.x
 sig   = 3.0:33,39,16,32,38,13,2f,35,a,5,4::
+; epiphany 3.4.1
+sig   = 3.0:33,39,16,32,38,13,2f,35,a,5,4,ff::
+
