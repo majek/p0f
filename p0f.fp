@@ -1178,3 +1178,28 @@ sig   = 3.0:33,39,16,32,38,13,2f,35,a,5,4::
 ; epiphany 3.4.1
 sig   = 3.0:33,39,16,32,38,13,2f,35,a,5,4,ff::
 
+
+label = s:!:Google bot:
+sys   = Windows,@unix
+sig   = 3.1:c011,5,4,2f,a,35,33,32,16,13,39,38,ff:?0,b,a,23,f:
+sig   = 3.1:4,5,a,13,16,2f,32,33,35,38,39,c011,ff:?0,b,a,23:
+
+label = s:!:Akregator bot:
+sys   = Windows,@unix
+sig   = 3.1:39,38,35,16,13,a,33,32,2f,7,5,4,15,12,9,14,11,8,6,3,ff:23:compr
+
+label = s:!:BLP_bbot:
+sys   = Windows,@unix
+sig   = 3.1:39,38,35,16,13,a,700c0,33,32,2f,7,50080,30080,5,4,10080,15,12,9,60040,14,11,8,6,40080,3,20080,ff::v2
+
+label = s:!:YandexBot:
+sys   = Windows,@unix
+sig   = 3.0:a,5,4::
+
+label = s:!:Facebook bot:
+sys   = Windows,@unix
+sig   = 3.1:c022,c021,39,38,88,87,35,84,c01c,c01b,16,13,a,c01f,c01e,33,32,9a,99,45,44,2f,96,41,5,4,15,12,9,14,11,8,6,3,ff:?0,f:compr
+
+label = s:!:Various bots:
+sys   = Windows,@unix
+sig   = 3.1:4,10080,5,2f,33,32,a,700c0,16,13,9,60040,15,12,3,20080,8,14,11,ff::v2
