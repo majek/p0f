@@ -796,7 +796,7 @@ static void score_nat(u8 to_srv, struct packet_flow* f, struct ssl_sig* sig) {
     if (remote_diff < recv_diff - SSL_MAX_TIME_DIFF ||
         remote_diff > recv_diff + SSL_MAX_TIME_DIFF) {
 
-      DEBUG("[#] SSL gmt_unix_time distance too high (%lld in %lld sec).\n",
+      DEBUG("[#] SSL gmt_unix_time skew too high (%lld in %lld sec).\n",
             remote_diff, recv_diff);
 
       score += 4;
