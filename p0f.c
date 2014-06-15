@@ -1165,9 +1165,7 @@ int main(int argc, char** argv) {
   }
 
   if (optind < argc) {
-	  if (disable_bpf) {
-		  if (optind != argc) FATAL("BPF Disabled, no filter rule expected.");
-	  } else {
+	  if (!disable_bpf) {
 		  if (optind + 1 == argc) orig_rule = (u8*)argv[optind];
 		  else FATAL("Filter rule must be a single parameter (use quotes).");
 	  }
