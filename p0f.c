@@ -91,7 +91,7 @@ static FILE* lf;                        /* Log file stream                    */
 
 static u8 stop_soon;                    /* Ctrl-C or so pressed?              */
 
-bool disable_bpf;                       /* Dont compile and assign BPF        */
+bool disable_bpf = false;               /* Dont compile and assign BPF        */
 
 u8 daemon_mode;                         /* Running in daemon mode?            */
 
@@ -1055,6 +1055,8 @@ int main(int argc, char** argv) {
 #endif /* ^__CYGWIN__ */
 
 	case 'b':
+		if (disable_bpf)
+			FATAL("Multiple -b options not supported.");
 		disable_bpf = true;
 		break;
 
