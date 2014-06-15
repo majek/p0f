@@ -125,7 +125,7 @@ verbose packet parsing and signature matching information will be written to
 stderr. This is useful when troubleshooting problems, but that's about it.
 
 The tool should compile cleanly under any reasonably new version of Linux,
-FreeBSD, OpenBSD, MacOS X, and so forth. You can also builtdit on Windows using
+FreeBSD, OpenBSD, MacOS X, and so forth. You can also build it on Windows using
 cygwin and winpcap. I have not tested it on all possible varieties of un*x, but
 if there are issues, they should be fairly superficial.
 
@@ -181,6 +181,9 @@ command-line options:
 
                Only one instance of p0f can be listening on a particular socket
                at any given time. The mode is also incompatible with -r.
+			   
+   -b        - disables the compiling and filtering by BPF. This is required to 
+			   listen to a nflog:{X} interface 
 
   -d         - runs p0f in daemon mode: the program will fork into background
                and continue writing to the specified log file or API socket. It
@@ -285,6 +288,11 @@ that fails, try this URL:
   
 Filters work both for online capture (-i) and for previously collected data
 produced by any other tool (-r).
+
+It is also possible to listen to a NFLOG (LINKTYPE_NFLOG) interface. BPF can 
+not be used on this interface. To listen to nflog group 1:
+
+# ./p0f -i nflog:1 -b
 
 -------------
 4. API access
@@ -963,6 +971,7 @@ including:
   Tomoyuki Murakami
   Marek Majkowski
   Michael Petch
+  Mathew Heard
 
 If you wish to help, the most immediate way to do so is to simply gather new
 signatures, especially from less popular or older platforms (servers, networking
