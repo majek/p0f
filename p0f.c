@@ -23,6 +23,7 @@
 #include <poll.h>
 #include <time.h>
 #include <locale.h>
+#include <stdbool.h>
 
 #include <sys/types.h>
 #include <sys/socket.h>
