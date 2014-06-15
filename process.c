@@ -268,7 +268,7 @@ void parse_packet(void* junk, const struct pcap_pkthdr* hdr, const u8* data) {
 		  packet_len -= nfsize;
 	  }
 	  if (!found_payload){
-		  WARN("Did not find payload TLV in NFLOG packet, skipping packet")
+		  WARN("Did not find payload TLV in NFLOG packet, skipping packet");
 		  return;
 	  }
   }
