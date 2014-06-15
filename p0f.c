@@ -1165,9 +1165,12 @@ int main(int argc, char** argv) {
   }
 
   if (optind < argc) {
-
-    if (optind + 1 == argc) orig_rule = (u8*)argv[optind];
-    else FATAL("Filter rule must be a single parameter (use quotes).");
+	  if (disable_bpf) {
+		  if (optind != argc) FATAL("BPF Disabled, no filter rule expected.");
+	  } else {
+		  if (optind + 1 == argc) orig_rule = (u8*)argv[optind];
+		  else FATAL("Filter rule must be a single parameter (use quotes).");
+	  }
 
   }
 
@@ -1210,13 +1213,13 @@ int main(int argc, char** argv) {
 
   read_config(fp_file ? fp_file : (u8*)FP_FILE);
 
+  prepare_pcap();
   if (disable_bpf) {
 	  SAYF("[+] BPF Disabled\n");
   }
   else {
-	  prepare_pcap();
+	  prepare_bpf();
   }
-  prepare_bpf();
 
   if (log_file) open_log();
   if (api_sock) open_api();
