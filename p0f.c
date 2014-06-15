@@ -90,6 +90,8 @@ static FILE* lf;                        /* Log file stream                    */
 
 static u8 stop_soon;                    /* Ctrl-C or so pressed?              */
 
+bool disable_bpf;                       /* Dont compile and assign BPF        */
+
 u8 daemon_mode;                         /* Running in daemon mode?            */
 
 static u8 set_promisc;                  /* Use promiscuous mode?              */
@@ -1050,6 +1052,9 @@ int main(int argc, char** argv) {
 
 #endif /* ^__CYGWIN__ */
 
+	case 'b':
+		disable_bpf = true;
+		break;
 
     case 'd':
 
@@ -1202,7 +1207,12 @@ int main(int argc, char** argv) {
 
   read_config(fp_file ? fp_file : (u8*)FP_FILE);
 
-  prepare_pcap();
+  if (disable_bpf) {
+	  SAYF("[+] BPF Disabled\n");
+  }
+  else {
+	  prepare_pcap();
+  }
   prepare_bpf();
 
   if (log_file) open_log();
