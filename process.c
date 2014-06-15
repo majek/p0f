@@ -1327,8 +1327,9 @@ static void flow_dispatch(struct packet_data* pk) {
       if (!f->acked) {
 
         DEBUG("[#] Never received SYN+ACK to complete handshake, huh.\n");
-        destroy_flow(f);
-        return;
+        //Allow one sided traffic.
+		//destroy_flow(f);
+        //return;
 
       }
 
