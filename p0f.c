@@ -808,7 +808,7 @@ static void live_event_loop(void) {
     s32 pret, i;
     u32 cur;
 
-    /* We use a 250 ms timeout to keep Ctrl-C responsive without resortng to
+    /* We use a 250 ms timeout to keep Ctrl-C responsive without resorting to
        silly sigaction hackery or unsafe signal handler code. */
 
 poll_again:
