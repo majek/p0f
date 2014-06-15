@@ -137,6 +137,7 @@ static void usage(void) {
 "  -s name   - answer to API queries at a named unix socket\n"
 #endif /* !__CYGWIN__ */
 "  -u user   - switch to the specified unprivileged account and chroot\n"
+"  -b        - dont compile and filter by BPF\n"
 "  -d        - fork into background (requires -o or -s)\n"
 "\n"
 "Performance-related options:\n"
@@ -1026,7 +1027,7 @@ int main(int argc, char** argv) {
   if (getuid() != geteuid())
     FATAL("Please don't make me setuid. See README for more.\n");
 
-  while ((r = getopt(argc, argv, "+LS:df:i:m:o:pr:s:t:u:")) != -1) switch (r) {
+  while ((r = getopt(argc, argv, "+LS:df:i:m:o:pr:s:t:u:b:")) != -1) switch (r) {
 
     case 'L':
 
