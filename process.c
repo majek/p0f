@@ -253,13 +253,13 @@ void parse_packet(void* junk, const struct pcap_pkthdr* hdr, const u8* data) {
 		  if (nfsize % 4 != 0)
 			  nfsize += 4 - nfsize % 4;
 		  if (nfsize == 0) {
-			  WARN("Invalid TLV length for NFLOG packet, aborting\n");
+			  WARN("[#] Invalid TLV length for NFLOG packet, aborting\n");
 			  return;
 		  }
 		  if ((*(data + 2) & 0xFF) == 9){
 			  data += 4;
 			  packet_len -= 4;
-			  DEBUG("Found TLV for packet payload payload\n");
+			  DEBUG("[#] Found TLV for packet payload payload\n");
 			  break;
 		  }
 		  data += nfsize;
