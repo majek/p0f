@@ -23,7 +23,6 @@
 #include <poll.h>
 #include <time.h>
 #include <locale.h>
-#include <stdbool.h>
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -91,7 +90,7 @@ static FILE* lf;                        /* Log file stream                    */
 
 static u8 stop_soon;                    /* Ctrl-C or so pressed?              */
 
-bool disable_bpf = false;               /* Dont compile and assign BPF        */
+u8 disable_bpf;                         /* Dont compile and assign BPF        */
 
 u8 daemon_mode;                         /* Running in daemon mode?            */
 
@@ -1057,7 +1056,7 @@ int main(int argc, char** argv) {
 	case 'b':
 		if (disable_bpf)
 			FATAL("Multiple -b options not supported.");
-		disable_bpf = true;
+		disable_bpf = 1;
 		break;
 
     case 'd':
