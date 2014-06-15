@@ -248,6 +248,7 @@ void parse_packet(void* junk, const struct pcap_pkthdr* hdr, const u8* data) {
 
   /* NFLOG has multiple sections to the packet, with variable length */
   if (link_type == DLT_NFLOG){
+	  u8 found_payload = false;
 	  while (packet_len > MIN_TCP4){
 		  u16 nfsize = (*data & 0xFF);
 		  if (nfsize % 4 != 0)
@@ -259,11 +260,16 @@ void parse_packet(void* junk, const struct pcap_pkthdr* hdr, const u8* data) {
 		  if ((*(data + 2) & 0xFF) == 9){
 			  data += 4;
 			  packet_len -= 4;
+			  found_payload = true;
 			  DEBUG("[#] Found TLV for packet payload payload\n");
 			  break;
 		  }
 		  data += nfsize;
 		  packet_len -= nfsize;
+	  }
+	  if (!found_payload){
+		  WARN("Did not find payload TLV in NFLOG packet, skipping packet")
+		  return;
 	  }
   }
 
