@@ -581,7 +581,7 @@ static void prepare_pcap(void) {
   link_type = pcap_datalink(pt);
 
   if (link_type == DLT_NFLOG){
-	  int status = setsockopt(pcap_fileno(p), SOL_NETLINK, NETLINK_NO_ENOBUFS, &(int){1}, sizeof(int));
+	  int status = setsockopt(pcap_fileno(pt), SOL_NETLINK, NETLINK_NO_ENOBUFS, &(int){1}, sizeof(int));
 	  if (status < 0)
 		  FATAL("setsockopt: %s", strerror(errno));
   }
