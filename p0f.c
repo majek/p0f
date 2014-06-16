@@ -475,17 +475,7 @@ p0f_open_live(const char *source, int snaplen, int promisc, int to_ms, char *err
 	status = pcap_set_buffer_size(p, 20971520);
 	if (status < 0)
 		goto fail;
-	/*
-	* Mark this as opened with pcap_open_live(), so that, for
-	* example, we show the full list of DLT_ values, rather
-	* than just the ones that are compatible with capturing
-	* when not in monitor mode.  That allows existing applications
-	* to work the way they used to work, but allows new applications
-	* that know about the new open API to, for example, find out the
-	* DLT_ values that they can select without changing whether
-	* the adapter is in monitor mode or not.
-	*/
-	p->oldstyle = 1;
+
 	status = pcap_activate(p);
 	if (status < 0)
 		goto fail;
