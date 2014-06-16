@@ -493,12 +493,12 @@ p0f_open_live(const char *source, int snaplen, int promisc, int to_ms, char *err
 fail:
 	if (status == PCAP_ERROR)
 		snprintf(errbuf, PCAP_ERRBUF_SIZE, "%s: %s", source,
-		p->errbuf);
+		pcap_geterr(p));
 	else if (status == PCAP_ERROR_NO_SUCH_DEVICE ||
 		status == PCAP_ERROR_PERM_DENIED ||
 		status == PCAP_ERROR_PROMISC_PERM_DENIED)
 		snprintf(errbuf, PCAP_ERRBUF_SIZE, "%s: %s (%s)", source,
-		pcap_statustostr(status), p->errbuf);
+		pcap_statustostr(status), pcap_geterr(p));
 	else
 		snprintf(errbuf, PCAP_ERRBUF_SIZE, "%s: %s", source,
 		pcap_statustostr(status));
