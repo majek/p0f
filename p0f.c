@@ -34,6 +34,12 @@
 #include <sys/wait.h>
 #include <netinet/in.h>
 
+//TODO: compile option for linux options
+#define NETLINK_NO_ENOBUFS	5
+
+#ifndef SOL_NETLINK
+#define SOL_NETLINK 270
+#endif
 #include <pcap.h>
 
 #ifdef NET_BPF
@@ -479,6 +485,11 @@ p0f_open_live(const char *source, int snaplen, int promisc, int to_ms, char *err
 	status = pcap_activate(p);
 	if (status < 0)
 		goto fail;
+
+	status = setsockopt(pcap_fileno(p), SOL_NETLINK, NETLINK_NO_ENOBUFS, &(int){1}, sizeof(int));
+	if (status < 0)
+                goto fail;
+
 	return (p);
 fail:
 	if (status == PCAP_ERROR)
