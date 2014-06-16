@@ -454,6 +454,58 @@ static u8* find_interface(int num) {
 
 #endif /* __CYGWIN__ */
 
+pcap_t *
+p0f_open_live(const char *source, int snaplen, int promisc, int to_ms, char *errbuf)
+{
+	pcap_t *p;
+	int status;
+
+	p = pcap_create(source, errbuf);
+	if (p == NULL)
+		return (NULL);
+	status = pcap_set_snaplen(p, snaplen);
+	if (status < 0)
+		goto fail;
+	status = pcap_set_promisc(p, promisc);
+	if (status < 0)
+		goto fail;
+	status = pcap_set_timeout(p, to_ms);
+	if (status < 0)
+		goto fail;
+	status = pcap_set_buffer_size(p, 20971520);
+	if (status < 0)
+		goto fail;
+	/*
+	* Mark this as opened with pcap_open_live(), so that, for
+	* example, we show the full list of DLT_ values, rather
+	* than just the ones that are compatible with capturing
+	* when not in monitor mode.  That allows existing applications
+	* to work the way they used to work, but allows new applications
+	* that know about the new open API to, for example, find out the
+	* DLT_ values that they can select without changing whether
+	* the adapter is in monitor mode or not.
+	*/
+	p->oldstyle = 1;
+	status = pcap_activate(p);
+	if (status < 0)
+		goto fail;
+	return (p);
+fail:
+	if (status == PCAP_ERROR)
+		snprintf(errbuf, PCAP_ERRBUF_SIZE, "%s: %s", source,
+		p->errbuf);
+	else if (status == PCAP_ERROR_NO_SUCH_DEVICE ||
+		status == PCAP_ERROR_PERM_DENIED ||
+		status == PCAP_ERROR_PROMISC_PERM_DENIED)
+		snprintf(errbuf, PCAP_ERRBUF_SIZE, "%s: %s (%s)", source,
+		pcap_statustostr(status), p->errbuf);
+	else
+		snprintf(errbuf, PCAP_ERRBUF_SIZE, "%s: %s", source,
+		pcap_statustostr(status));
+	pcap_close(p);
+	return (NULL);
+}
+
 
 /* Initialize PCAP capture */
 
@@ -509,14 +561,14 @@ static void prepare_pcap(void) {
   
     }
 
-    pt = pcap_open_live((char*)use_iface, SNAPLEN, set_promisc, 250, pcap_err);
+	pt = p0f_open_live((char*)use_iface, SNAPLEN, set_promisc, 250, pcap_err);
 
 #else 
 
     /* PCAP timeouts tend to be broken, so we'll use a minimum value
        and rely on select() instead. */
 
-    pt = pcap_open_live((char*)use_iface, SNAPLEN, set_promisc, 1, pcap_err);
+	pt = p0f_open_live((char*)use_iface, SNAPLEN, set_promisc, 1, pcap_err);
 
 #endif /* ^__CYGWIN__ */
 
