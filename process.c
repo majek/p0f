@@ -89,9 +89,9 @@ static void find_offset(const u8* data, s32 total_len) {
   switch (link_type) {
 
     case DLT_RAW:        link_off = 0;  return;
-
+#ifdef DLT_NFLOG
 	case DLT_NFLOG:      link_off = 4; return; //family, version, resource_id
-
+#endif
     case DLT_NULL:
     case DLT_PPP:        link_off = 4;  return;
 
@@ -246,6 +246,7 @@ void parse_packet(void* junk, const struct pcap_pkthdr* hdr, const u8* data) {
 
   }
 
+#ifdef DLT_NFLOG
   /* NFLOG has multiple sections to the packet, with variable length */
   if (link_type == DLT_NFLOG){
 	  u8 found_payload = 0;
@@ -272,6 +273,7 @@ void parse_packet(void* junk, const struct pcap_pkthdr* hdr, const u8* data) {
 		  return;
 	  }
   }
+#endif
 
   /* If there is no way we could have received a complete TCP packet, bail
      out early. */

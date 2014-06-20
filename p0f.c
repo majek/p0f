@@ -484,11 +484,13 @@ p0f_open_live(const char *source, int snaplen, int promisc, int to_ms, char *err
 
 	link_type = pcap_datalink(p);
 
+#ifdef DLT_NFLOG
 	if (link_type == DLT_NFLOG){
 		status = setsockopt(pcap_fileno(p), SOL_NETLINK, NETLINK_NO_ENOBUFS, &(int){1}, sizeof(int));
 		if (status < 0)
 			FATAL("setsockopt: %s", strerror(errno));
 	}
+#endif
 
 	status = pcap_activate(p);
 	if (status < 0)
@@ -500,8 +502,11 @@ fail:
 		snprintf(errbuf, PCAP_ERRBUF_SIZE, "%s: %s", source,
 		pcap_geterr(p));
 	else if (status == PCAP_ERROR_NO_SUCH_DEVICE ||
-		status == PCAP_ERROR_PERM_DENIED ||
-		status == PCAP_ERROR_PROMISC_PERM_DENIED)
+		status == PCAP_ERROR_PERM_DENIED
+#ifdef PCAP_ERROR_PROMISC_PERM_DENIED
+		|| status == PCAP_ERROR_PROMISC_PERM_DENIED
+#endif
+		)
 		snprintf(errbuf, PCAP_ERRBUF_SIZE, "%s: %s (%s)", source,
 		pcap_statustostr(status), pcap_geterr(p));
 	else
