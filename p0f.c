@@ -469,18 +469,27 @@ p0f_open_live(const char *source, int snaplen, int promisc, int to_ms, char *err
 	p = pcap_create(source, errbuf);
 	if (p == NULL)
 		return (NULL);
+	DEBUG("PCAP created successfully");
+
 	status = pcap_set_snaplen(p, snaplen);
 	if (status < 0)
 		goto fail;
+	DEBUG("PCAP snaplen set successfully");
+
 	status = pcap_set_promisc(p, promisc);
 	if (status < 0)
 		goto fail;
+	DEBUG("PCAP promisc set successfully");
+
 	status = pcap_set_timeout(p, to_ms);
 	if (status < 0)
 		goto fail;
+	DEBUG("PCAP timeout set successfully");
+
 	status = pcap_set_buffer_size(p, 20971520);
 	if (status < 0)
 		goto fail;
+	DEBUG("PCAP buffer set successfully");
 
 	link_type = pcap_datalink(p);
 
@@ -489,12 +498,14 @@ p0f_open_live(const char *source, int snaplen, int promisc, int to_ms, char *err
 		status = setsockopt(pcap_fileno(p), SOL_NETLINK, NETLINK_NO_ENOBUFS, &(int){1}, sizeof(int));
 		if (status < 0)
 			FATAL("setsockopt: %s", strerror(errno));
+		DEBUG("PCAP overflow condition set successfully");
 	}
 #endif
 
 	status = pcap_activate(p);
 	if (status < 0)
 		goto fail;
+	DEBUG("PCAP activated");
 
 	return (p);
 fail:
