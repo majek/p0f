@@ -482,6 +482,15 @@ p0f_open_live(const char *source, int snaplen, int promisc, int to_ms, char *err
 	if (status < 0)
 		goto fail;
 
+
+	link_type = pcap_datalink(pt);
+
+	if (link_type == DLT_NFLOG){
+		status = setsockopt(pcap_fileno(pt), SOL_NETLINK, NETLINK_NO_ENOBUFS, &(int){1}, sizeof(int));
+		if (status < 0)
+			FATAL("setsockopt: %s", strerror(errno));
+	}
+
 	status = pcap_activate(p);
 	if (status < 0)
 		goto fail;
@@ -576,14 +585,6 @@ static void prepare_pcap(void) {
 
     if (!pt) FATAL("pcap_open_live: %s", pcap_err);
 
-  }
-
-  link_type = pcap_datalink(pt);
-
-  if (link_type == DLT_NFLOG){
-	  int status = setsockopt(pcap_fileno(pt), SOL_NETLINK, NETLINK_NO_ENOBUFS, &(int){1}, sizeof(int));
-	  if (status < 0)
-		  FATAL("setsockopt: %s", strerror(errno));
   }
 }
 
