@@ -85,6 +85,7 @@ static void find_offset(const u8* data, s32 total_len) {
   u8 i;
 
   /* Check hardcoded values for some of the most common options. */
+  DEBUG("[#] Looking for offset for link type: %d\n", link_type);
 
   switch (link_type) {
 
