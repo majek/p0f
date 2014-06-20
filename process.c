@@ -96,7 +96,7 @@ static void find_offset(const u8* data, s32 total_len) {
     case DLT_NULL:
     case DLT_PPP:        link_off = 4;  return;
 
-    case DLT_LOOP:
+    //case DLT_LOOP:
 
 #ifdef DLT_PPP_SERIAL
     case DLT_PPP_SERIAL:
@@ -114,6 +114,8 @@ static void find_offset(const u8* data, s32 total_len) {
 
     case DLT_IEEE802_11: link_off = 32; return;
   }
+
+  DEBUG("[#] UNKNOWN DLT %d, attempting to find offset\n", link_type);
 
   /* If this fails, try to auto-detect. There is a slight risk that if the
      first packet we see is maliciously crafted, and somehow gets past the
