@@ -482,11 +482,10 @@ p0f_open_live(const char *source, int snaplen, int promisc, int to_ms, char *err
 	if (status < 0)
 		goto fail;
 
-
-	link_type = pcap_datalink(pt);
+	link_type = pcap_datalink(p);
 
 	if (link_type == DLT_NFLOG){
-		status = setsockopt(pcap_fileno(pt), SOL_NETLINK, NETLINK_NO_ENOBUFS, &(int){1}, sizeof(int));
+		status = setsockopt(pcap_fileno(p), SOL_NETLINK, NETLINK_NO_ENOBUFS, &(int){1}, sizeof(int));
 		if (status < 0)
 			FATAL("setsockopt: %s", strerror(errno));
 	}
