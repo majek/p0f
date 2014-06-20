@@ -89,6 +89,7 @@ static void find_offset(const u8* data, s32 total_len) {
   switch (link_type) {
 
     case DLT_RAW:        link_off = 0;  return;
+	case DLT_LOOP:       link_off = 14;  return;
 #ifdef DLT_NFLOG
 	case DLT_NFLOG:      link_off = 4; return; //family, version, resource_id
 #endif

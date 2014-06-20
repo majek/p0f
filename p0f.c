@@ -469,27 +469,27 @@ p0f_open_live(const char *source, int snaplen, int promisc, int to_ms, char *err
 	p = pcap_create(source, errbuf);
 	if (p == NULL)
 		return (NULL);
-	DEBUG("PCAP created successfully");
+	DEBUG("PCAP created successfully\n");
 
 	status = pcap_set_snaplen(p, snaplen);
 	if (status < 0)
 		goto fail;
-	DEBUG("PCAP snaplen set successfully");
+	DEBUG("PCAP snaplen set successfully\n");
 
 	status = pcap_set_promisc(p, promisc);
 	if (status < 0)
 		goto fail;
-	DEBUG("PCAP promisc set successfully");
+	DEBUG("PCAP promisc set successfully\n");
 
 	status = pcap_set_timeout(p, to_ms);
 	if (status < 0)
 		goto fail;
-	DEBUG("PCAP timeout set successfully");
+	DEBUG("PCAP timeout set successfully\n");
 
 	status = pcap_set_buffer_size(p, 20971520);
 	if (status < 0)
 		goto fail;
-	DEBUG("PCAP buffer set successfully");
+	DEBUG("PCAP buffer set successfully\n");
 
 	link_type = pcap_datalink(p);
 
