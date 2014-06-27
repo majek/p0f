@@ -807,8 +807,7 @@ static void abort_handler(int sig) {
 
 #ifdef USE_EPOLL
 
-
-static void poll_event_loop(void){
+static void epoll_event_loop(void){
 	struct api_client* ctable;
 	
 	//Overallocate for now TODO: properly
