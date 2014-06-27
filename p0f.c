@@ -820,7 +820,8 @@ static void epoll_event_loop(void){
 
 	while (!stop_soon) {
 		int nfds = epoll_wait(epfd, events, 5, -1);
-		for (int n = 0; n < nfds; ++n) {
+		int n = 0;
+		for ( n < nfds ) {
 			int fd = events[n].data.fd;
 			if (fd == pcap_fileno(pt)){//TODO optimize
 				//Handle PCAP event
@@ -864,7 +865,7 @@ static void epoll_event_loop(void){
 					if (ctable[fd].in_off >= sizeof(struct p0f_api_query))
 						FATAL("Inconsistent p0f_api_query state.\n");
 
-					i = read(pfds[fd].fd,
+					int i = read(pfds[fd].fd,
 						((char*)&ctable[fd].in_data) + ctable[fd].in_off,
 						sizeof(struct p0f_api_query) - ctable[fd].in_off);
 
@@ -876,12 +877,15 @@ static void epoll_event_loop(void){
 
 					if (ctable[fd].in_off == sizeof(struct p0f_api_query)) {
 
-						handle_query(&ctable[fd]->in_data, &ctable[fd]->out_data);
+						handle_query(&ctable[fd].in_data, &ctable[fd].out_data);
 						//pfds[fd].events = (POLLOUT | POLLERR | POLLHUP);
 
 					}
 				}
 			}
+
+			//Increment n (like a for loop!)
+			++n;
 		}
 	}
 }
