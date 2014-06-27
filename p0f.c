@@ -817,6 +817,7 @@ static void epoll_event_loop(void){
 	struct epoll_event ev;
 	struct epoll_event events[5];
 	int pcap_fd = pcap_fileno(pt);
+	int res;
 
 	//Initial epoll setup
 	int epfd = epoll_create(api_max_conn);
@@ -824,7 +825,7 @@ static void epoll_event_loop(void){
 	//add PCAP fd
 	ev.events = EPOLLIN | EPOLLERR | EPOLLHUP;
 	ev.data.fd = pcap_fd;
-	int res = epoll_ctl(epfd, EPOLL_CTL_ADD, pcap_fd, &ev);
+	res = epoll_ctl(epfd, EPOLL_CTL_ADD, pcap_fd, &ev);
 	if (res != 0){
 		PFATAL("epoll_ctl() failed.");
 	}
@@ -832,7 +833,7 @@ static void epoll_event_loop(void){
 	//add api fd
 	ev.events = EPOLLIN | EPOLLERR | EPOLLHUP;
 	ev.data.fd = api_fd;
-	int res = epoll_ctl(epfd, EPOLL_CTL_ADD, api_fd, &ev);
+	res = epoll_ctl(epfd, EPOLL_CTL_ADD, api_fd, &ev);
 	if (res != 0){
 		PFATAL("epoll_ctl() failed.");
 	}
@@ -870,7 +871,7 @@ static void epoll_event_loop(void){
 
 						ev.events = EPOLLIN | EPOLLERR | EPOLLHUP;
 						ev.data.fd = client_sock;
-						int res = epoll_ctl(epfd, EPOLL_CTL_ADD, client_sock, &ev);
+						res = epoll_ctl(epfd, EPOLL_CTL_ADD, client_sock, &ev);
 						if (res != 0){
 							PFATAL("epoll_ctl() failed.");
 						}
@@ -894,13 +895,13 @@ static void epoll_event_loop(void){
 					if (ctable[fd].in_off >= sizeof(struct p0f_api_query))
 						FATAL("Inconsistent p0f_api_query state.\n");
 
-					int i = read(fd,
+					res = read(fd,
 						((char*)&ctable[fd].in_data) + ctable[fd].in_off,
 						sizeof(struct p0f_api_query) - ctable[fd].in_off);
 
-					if (i < 0) PFATAL("read() on API socket fails despite POLLIN.");
+					if (res < 0) PFATAL("read() on API socket fails despite POLLIN.");
 
-					ctable[fd].in_off += i;
+					ctable[fd].in_off += res;
 
 					/* Query in place? Compute response and prepare to send it back. */
 
@@ -916,14 +917,14 @@ static void epoll_event_loop(void){
 						if (fcntl(fd, F_SETFL, ~O_NONBLOCK))
 							PFATAL("fcntl() to set ~O_NONBLOCK on API connection fails.");
 
-						i = write(fd,
+						res = write(fd,
 							((char*)&ctable[fd].out_data),
 							sizeof(struct p0f_api_response));
 
 						if (fcntl(fd, F_SETFL, O_NONBLOCK))
 							PFATAL("fcntl() to set O_NONBLOCK on API connection fails.");
 
-						if (i <= 0) PFATAL("write() on API socket fails despite POLLOUT.");
+						if (res <= 0) PFATAL("write() on API socket fails despite POLLOUT.");
 					}
 				}
 			}
