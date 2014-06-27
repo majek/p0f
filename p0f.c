@@ -856,6 +856,7 @@ static void epoll_event_loop(void){
 							PFATAL("epoll_ctl() failed.");
 						}
 					}
+				}
 				else if (events[n].events & EPOLLERR || events[n].events & EPOLLHUP){
 					FATAL("Packet capture interface is down.");
 				}
@@ -896,7 +897,7 @@ static void epoll_event_loop(void){
 						if (fcntl(fd, F_SETFL, ~O_NONBLOCK))
 							PFATAL("fcntl() to set ~O_NONBLOCK on API connection fails.");
 
-						i = write(fd
+						i = write(fd,
 							((char*)&ctable[fd].out_data),
 							sizeof(struct p0f_api_response));
 
