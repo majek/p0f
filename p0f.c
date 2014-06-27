@@ -830,12 +830,14 @@ static void epoll_event_loop(void){
 		PFATAL("epoll_ctl() failed.");
 	}
 
-	//add api fd
-	ev.events = EPOLLIN | EPOLLERR | EPOLLHUP;
-	ev.data.fd = api_fd;
-	res = epoll_ctl(epfd, EPOLL_CTL_ADD, api_fd, &ev);
-	if (res != 0){
-		PFATAL("epoll_ctl() failed.");
+	if (api_fd){
+		//add api fd
+		ev.events = EPOLLIN | EPOLLERR | EPOLLHUP;
+		ev.data.fd = api_fd;
+		res = epoll_ctl(epfd, EPOLL_CTL_ADD, api_fd, &ev);
+		if (res != 0){
+			PFATAL("epoll_ctl() failed.");
+		}
 	}
 
 	//Main loop
