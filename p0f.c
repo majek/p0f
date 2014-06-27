@@ -818,13 +818,13 @@ static void epoll_event_loop(void){
 	struct epoll_event events[5];
 	int epfd = epoll_create(api_max_conn);
 
-	for (;;){
+	while (!stop_soon) {
 		int nfds = epoll_wait(epfd, events, 5, -1);
 		for (int n = 0; n < nfds; ++n) {
 			int fd = events[n].data.fd;
 			if (fd == pcap_fileno(pt)){//TODO optimize
 				//Handle PCAP event
-				if (events[n].events & POLLIN){
+				if (events[n].events & EPOLLIN){
 					if (pcap_dispatch(pt, -1, (pcap_handler)parse_packet, 0) < 0)
 						FATAL("Packet capture interface is down.");
 				}
@@ -852,13 +852,13 @@ static void epoll_event_loop(void){
 			}
 			else{
 				//Handle API query
-				if (events[n].events & POLLERR || events[n].events & POLLHUP){
+				if (events[n].events & EPOLLERR || events[n].events & EPOLLHUP){
 					DEBUG("[#] API connection on fd %d closed.\n", events[n].data.fd);
 
 					close(events[n].data.fd);
 					ctable[fd].fd = -1;
 				}
-				else if (events[n].events & POLLIN){
+				else if (events[n].events & EPOLLIN){
 					/* Receive API query, dispatch when complete. */
 
 					if (ctable[fd].in_off >= sizeof(struct p0f_api_query))
