@@ -930,7 +930,7 @@ static void epoll_event_loop(void){
 						/* Write API response, restart state when complete. */
 
 						//Disable non block for a minute
-						if (fcntl(fd, F_SETFL, ~O_NONBLOCK))
+						if (fcntl(fd, F_SETFL, 0))
 							PFATAL("fcntl() to set ~O_NONBLOCK on API connection fails.");
 
 						res = write(fd,
