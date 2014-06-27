@@ -872,7 +872,7 @@ static void epoll_event_loop(void){
 					if (client_sock < 0) {
 						WARN("Unable to handle API connection: accept() fails.");
 					}
-					else if (client_sock > slots){
+					else if (client_sock >= slots){
 						WARN("Unable to handle API connection: too many connection.");
 						close(client_sock);
 					}
