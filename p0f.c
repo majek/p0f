@@ -153,7 +153,11 @@ static void usage(void) {
 "Performance-related options:\n"
 "\n"
 #ifndef __CYGWIN__
+#ifdef USE_EPOLL
+"  -S limit  - limit number of parallel API connections, not guarunteed (%u)\n"
+#else
 "  -S limit  - limit number of parallel API connections (%u)\n"
+#endif
 #endif /* !__CYGWIN__ */
 "  -t c,h    - set connection / host cache age limits (%us,%um)\n"
 "  -m c,h    - cap the number of active connections / hosts (%u,%u)\n"
@@ -811,8 +815,8 @@ static void abort_handler(int sig) {
 static void epoll_event_loop(void){
 	struct api_client* ctable;
 	
-	//Overallocate for now TODO: properly
-	ctable = ck_alloc(40 * sizeof(struct api_client));
+	int slots = 6 + api_max_conn;
+	ctable = ck_alloc(slots * sizeof(struct api_client));
 
 	struct epoll_event ev;
 	struct epoll_event events[5];
@@ -867,6 +871,10 @@ static void epoll_event_loop(void){
 
 					if (client_sock < 0) {
 						WARN("Unable to handle API connection: accept() fails.");
+					}
+					else if (client_sock > slots){
+						WARN("Unable to handle API connection: too many connection.");
+						close(client_sock);
 					}
 					else {
 						if (fcntl(client_sock, F_SETFL, O_NONBLOCK))
@@ -1268,7 +1276,7 @@ int main(int argc, char** argv) {
 
       api_max_conn = atol(optarg);
 
-      if (!api_max_conn || api_max_conn > 100)
+      if (!api_max_conn || api_max_conn > 250)
         FATAL("Outlandish value specified for -S.");
 
       break;
