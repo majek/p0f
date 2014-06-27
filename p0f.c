@@ -892,15 +892,12 @@ static void epoll_event_loop(void){
 						//This reduces complexity and improves performance, providing it holds true
 						/* Write API response, restart state when complete. */
 
-						if (ctable[fd]->in_off < sizeof(struct p0f_api_query))
-							FATAL("Inconsistent p0f_api_response state.\n");
-
 						//Disable non block for a minute
 						if (fcntl(fd, F_SETFL, ~O_NONBLOCK))
 							PFATAL("fcntl() to set ~O_NONBLOCK on API connection fails.");
 
 						i = write(fd
-							((char*)&ctable[fd]->out_data),
+							((char*)&ctable[fd].out_data),
 							sizeof(struct p0f_api_response));
 
 						if (fcntl(fd, F_SETFL, O_NONBLOCK))
