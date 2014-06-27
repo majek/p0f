@@ -817,40 +817,47 @@ static void epoll_event_loop(void){
 	struct epoll_event ev;
 	struct epoll_event events[5];
 	int epfd = epoll_create(api_max_conn);
+	int pcap_fd = pcap_fileno(pt);
 
 	while (!stop_soon) {
 		int nfds = epoll_wait(epfd, events, 5, -1);
 		int n = 0;
 		while ( n < nfds ) {
 			int fd = events[n].data.fd;
-			if (fd == pcap_fileno(pt)){//TODO optimize
+			if (fd == pcap_fd){
 				//Handle PCAP event
 				if (events[n].events & EPOLLIN){
 					if (pcap_dispatch(pt, -1, (pcap_handler)parse_packet, 0) < 0)
 						FATAL("Packet capture interface is down.");
 				}
+				else if(events[n].events & EPOLLERR || events[n].events & EPOLLHUP){
+					FATAL("Packet capture interface is down.");
+				}
 			}
 			else if (fd == api_fd) {
 				//Accept api connection
+				if (events[n].events & EPOLLIN){
+					int client_sock = accept(api_fd, NULL, NULL);
+					ctable[fd].fd = client_sock;
 
-				int client_sock = accept(api_fd, NULL, NULL);
-				ctable[fd].fd = client_sock;
-
-				if (client_sock < 0) {
-					WARN("Unable to handle API connection: accept() fails.");
-				}
-				else {
-					if (fcntl(client_sock, F_SETFL, O_NONBLOCK))
-						PFATAL("fcntl() to set O_NONBLOCK on API connection fails.");
-
-					ctable[fd].in_off = ctable[fd].out_off = 0;
-
-					ev.events = EPOLLIN | EPOLLPRI | EPOLLERR | EPOLLHUP;
-					ev.data.fd = client_sock;
-					int res = epoll_ctl(epfd, EPOLL_CTL_ADD, client_sock, &ev);
-					if (res != 0){
-						PFATAL("epoll_ctl() failed.");
+					if (client_sock < 0) {
+						WARN("Unable to handle API connection: accept() fails.");
 					}
+					else {
+						if (fcntl(client_sock, F_SETFL, O_NONBLOCK))
+							PFATAL("fcntl() to set O_NONBLOCK on API connection fails.");
+
+						ctable[fd].in_off = 0;
+
+						ev.events = EPOLLIN | EPOLLPRI | EPOLLERR | EPOLLHUP;
+						ev.data.fd = client_sock;
+						int res = epoll_ctl(epfd, EPOLL_CTL_ADD, client_sock, &ev);
+						if (res != 0){
+							PFATAL("epoll_ctl() failed.");
+						}
+					}
+				else if (events[n].events & EPOLLERR || events[n].events & EPOLLHUP){
+					FATAL("Packet capture interface is down.");
 				}
 			}
 			else{
@@ -878,10 +885,28 @@ static void epoll_event_loop(void){
 					/* Query in place? Compute response and prepare to send it back. */
 
 					if (ctable[fd].in_off == sizeof(struct p0f_api_query)) {
-
 						handle_query(&ctable[fd].in_data, &ctable[fd].out_data);
-						//pfds[fd].events = (POLLOUT | POLLERR | POLLHUP);
 
+						//A unix socket shouldnt block here, unless we arent reading fast enough
+						//Lets assume we have reasonably good clients and that this is a non issue
+						//This reduces complexity and improves performance, providing it holds true
+						/* Write API response, restart state when complete. */
+
+						if (ctable[fd]->in_off < sizeof(struct p0f_api_query))
+							FATAL("Inconsistent p0f_api_response state.\n");
+
+						//Disable non block for a minute
+						if (fcntl(fd, F_SETFL, ~O_NONBLOCK))
+							PFATAL("fcntl() to set ~O_NONBLOCK on API connection fails.");
+
+						i = write(fd
+							((char*)&ctable[fd]->out_data),
+							sizeof(struct p0f_api_response));
+
+						if (fcntl(fd, F_SETFL, O_NONBLOCK))
+							PFATAL("fcntl() to set O_NONBLOCK on API connection fails.");
+
+						if (i <= 0) PFATAL("write() on API socket fails despite POLLOUT.");
 					}
 				}
 			}
@@ -890,6 +915,8 @@ static void epoll_event_loop(void){
 			++n;
 		}
 	}
+
+	ck_free(ctable);
 }
 #else
 /* Regenerate pollfd data for poll() */
