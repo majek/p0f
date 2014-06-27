@@ -840,6 +840,9 @@ static void epoll_event_loop(void){
 		}
 	}
 
+	if (!daemon_mode)
+		SAYF("[+] Entered main event loop.\n\n");
+
 	//Main loop
 	while (!stop_soon) {
 		int nfds = epoll_wait(epfd, events, 5, -1);
