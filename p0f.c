@@ -830,7 +830,7 @@ static void epoll_event_loop(void){
 		PFATAL("epoll_ctl() failed.");
 	}
 
-	if (api_fd){
+	if (api_sock){
 		//add api fd
 		ev.events = EPOLLIN | EPOLLERR | EPOLLHUP;
 		ev.data.fd = api_fd;
