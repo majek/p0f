@@ -17,6 +17,9 @@
  * Things you may reasonably want to change *
  ********************************************/
 
+/* Use epoll, enable only if available */
+#define USE_EPOLL
+
 /* Default location of p0f.fp: */
 
 #ifndef FP_FILE
