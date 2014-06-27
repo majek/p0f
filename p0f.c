@@ -20,11 +20,6 @@
 #include <dirent.h>
 #include <pwd.h>
 #include <grp.h>
-#ifdef USE_EPOLL
-#include <sys/epoll.h>
-#else
-#include <poll.h>
-#endif
 #include <time.h>
 #include <locale.h>
 
@@ -61,6 +56,12 @@
 #include "tcp.h"
 #include "fp_http.h"
 #include "p0f.h"
+
+#ifdef USE_EPOLL
+#include <sys/epoll.h>
+#else
+#include <poll.h>
+#endif
 
 #ifndef PF_INET6
 #  define PF_INET6          10
