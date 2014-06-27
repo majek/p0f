@@ -816,9 +816,28 @@ static void epoll_event_loop(void){
 
 	struct epoll_event ev;
 	struct epoll_event events[5];
-	int epfd = epoll_create(api_max_conn);
 	int pcap_fd = pcap_fileno(pt);
 
+	//Initial epoll setup
+	int epfd = epoll_create(api_max_conn);
+
+	//add PCAP fd
+	ev.events = EPOLLIN | EPOLLERR | EPOLLHUP;
+	ev.data.fd = pcap_fd;
+	int res = epoll_ctl(epfd, EPOLL_CTL_ADD, pcap_fd, &ev);
+	if (res != 0){
+		PFATAL("epoll_ctl() failed.");
+	}
+
+	//add api fd
+	ev.events = EPOLLIN | EPOLLERR | EPOLLHUP;
+	ev.data.fd = api_fd;
+	int res = epoll_ctl(epfd, EPOLL_CTL_ADD, api_fd, &ev);
+	if (res != 0){
+		PFATAL("epoll_ctl() failed.");
+	}
+
+	//Main loop
 	while (!stop_soon) {
 		int nfds = epoll_wait(epfd, events, 5, -1);
 		int n = 0;
@@ -849,7 +868,7 @@ static void epoll_event_loop(void){
 
 						ctable[fd].in_off = 0;
 
-						ev.events = EPOLLIN | EPOLLPRI | EPOLLERR | EPOLLHUP;
+						ev.events = EPOLLIN | EPOLLERR | EPOLLHUP;
 						ev.data.fd = client_sock;
 						int res = epoll_ctl(epfd, EPOLL_CTL_ADD, client_sock, &ev);
 						if (res != 0){
