@@ -939,6 +939,7 @@ static void epoll_event_loop(void){
 		}
 	}
 
+	close(epfd);
 	ck_free(ctable);
 }
 #else
