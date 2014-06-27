@@ -921,6 +921,9 @@ static void epoll_event_loop(void){
 					if (ctable[fd].in_off == sizeof(struct p0f_api_query)) {
 						handle_query(&ctable[fd].in_data, &ctable[fd].out_data);
 
+						//Reset in offset
+						ctable[fd].in_off = 0;
+
 						//A unix socket shouldnt block here, unless we arent reading fast enough
 						//Lets assume we have reasonably good clients and that this is a non issue
 						//This reduces complexity and improves performance, providing it holds true
