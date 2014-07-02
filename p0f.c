@@ -803,6 +803,7 @@ static void fork_off(void) {
 /* Handler for Ctrl-C and related signals */
 
 static void abort_handler(int sig) {
+	SAYF("Received signal: %d\n", sig);
   if (stop_soon) exit(1);
   stop_soon = 1;
 }
@@ -867,7 +868,6 @@ static void epoll_event_loop(void){
 				//Accept api connection
 				if (events[n].events & EPOLLIN){
 					int client_sock = accept(api_fd, NULL, NULL);
-					ctable[fd].fd = client_sock;
 
 					if (client_sock < 0) {
 						WARN("Unable to handle API connection: accept() fails.");
@@ -877,6 +877,8 @@ static void epoll_event_loop(void){
 						close(client_sock);
 					}
 					else {
+						ctable[fd].fd = client_sock;
+
 						if (fcntl(client_sock, F_SETFL, O_NONBLOCK))
 							PFATAL("fcntl() to set O_NONBLOCK on API connection fails.");
 
@@ -899,7 +901,7 @@ static void epoll_event_loop(void){
 				if (events[n].events & EPOLLERR || events[n].events & EPOLLHUP){
 					DEBUG("[#] API connection on fd %d closed.\n", events[n].data.fd);
 
-					close(events[n].data.fd);
+					close(fd);
 					ctable[fd].fd = -1;
 				}
 				else if (events[n].events & EPOLLIN){
