@@ -1041,6 +1041,8 @@ static void epoll_event_loop(void){
 #endif
 	int res;
 
+	DEBUG("pcap fd: %d", pcap_fd);
+
 	//Initial epoll setup
 	int epfd = epoll_create(api_max_conn);
 

@@ -39,7 +39,9 @@
 
 u64 packet_cnt;                         /* Total number of packets processed  */
 
+#ifdef USE_LIBPCAP
 static s8 link_off = -1;                /* Link-specific IP header offset     */
+#endif
 static u8 bad_packets;                  /* Seen non-IP packets?               */
 
 static struct host_data *host_by_age,   /* All host entries, by last mod      */
@@ -102,6 +104,510 @@ u8* addr_to_str(u8* data, u8 ip_ver) {
 
 	return (u8*)tmp;
 
+}
+
+void process_packet(const u8* data, s32 packet_len){
+	struct tcp_hdr* tcp;
+	struct packet_data pk;
+
+	u32 tcp_doff;
+
+	u8* opt_end;
+
+	/* If there is no way we could have received a complete TCP packet, bail
+	out early. */
+
+	if (packet_len < MIN_TCP4) {
+		DEBUG("[#] Packet too short for any IPv4 + TCP headers, giving up!\n");
+		return;
+	}
+
+	pk.quirks = 0;
+
+	if ((*data >> 4) == IP_VER4) {
+
+		/************************
+		* IPv4 header parsing. *
+		************************/
+
+		const struct ipv4_hdr* ip4 = (struct ipv4_hdr*)data;
+
+		u32 hdr_len = (ip4->ver_hlen & 0x0F) * 4;
+		u16 flags_off = ntohs(RD16(ip4->flags_off));
+		u16 tot_len = ntohs(RD16(ip4->tot_len));
+
+		/* If the packet claims to be shorter than what we received off the wire,
+		honor this claim to account for etherleak-type bugs. */
+
+		if (packet_len > tot_len) {
+			packet_len = tot_len;
+			// DEBUG("[#] ipv4.tot_len = %u, adjusted accordingly.\n", tot_len);
+		}
+
+		/* Bail out if the result leaves no room for IPv4 + TCP headers. */
+
+		if (packet_len < MIN_TCP4) {
+			DEBUG("[#] packet_len = %u. Too short for IPv4 + TCP, giving up!\n",
+				packet_len);
+			return;
+		}
+
+		/* Bail out if the declared length of IPv4 headers is nonsensical. */
+
+		if (hdr_len < sizeof(struct ipv4_hdr)) {
+			DEBUG("[#] ipv4.hdr_len = %u. Too short for IPv4, giving up!\n",
+				hdr_len);
+			return;
+		}
+
+		/* If the packet claims to be longer than the recv buffer, best to back
+		off - even though we could just ignore this and recover. */
+
+		if (tot_len > packet_len) {
+			DEBUG("[#] ipv4.tot_len = %u but packet_len = %u, bailing out!\n",
+				tot_len, packet_len);
+			return;
+		}
+
+		/* And finally, bail out if after skipping the IPv4 header as specified
+		(including options), there wouldn't be enough room for TCP. */
+
+		if (hdr_len + sizeof(struct tcp_hdr) > packet_len) {
+			DEBUG("[#] ipv4.hdr_len = %u, packet_len = %d, no room for TCP!\n",
+				hdr_len, packet_len);
+			return;
+		}
+
+		/* Bail out if the subsequent protocol is not TCP. */
+
+		if (ip4->proto != PROTO_TCP) {
+			DEBUG("[#] Whoa, IPv4 packet with non-TCP payload (%u)?\n", ip4->proto);
+			return;
+		}
+
+		/* Ignore any traffic with MF or non-zero fragment offset specified. We
+		can do enough just fingerprinting the non-fragmented traffic. */
+
+		if (flags_off & ~(IP4_DF | IP4_MBZ)) {
+			DEBUG("[#] Packet fragment (0x%04x), letting it slide!\n", flags_off);
+			return;
+		}
+
+		/* Store some relevant information about the packet. */
+
+		pk.ip_ver = IP_VER4;
+
+		pk.ip_opt_len = hdr_len - 20;
+
+		memcpy(pk.src, ip4->src, 4);
+		memcpy(pk.dst, ip4->dst, 4);
+
+		pk.tos = ip4->tos_ecn >> 2;
+
+		pk.ttl = ip4->ttl;
+
+		if (ip4->tos_ecn & (IP_TOS_CE | IP_TOS_ECT)) pk.quirks |= QUIRK_ECN;
+
+		/* Tag some of the corner cases associated with implementation quirks. */
+
+		if (flags_off & IP4_MBZ) pk.quirks |= QUIRK_NZ_MBZ;
+
+		if (flags_off & IP4_DF) {
+
+			pk.quirks |= QUIRK_DF;
+			if (RD16(ip4->id)) pk.quirks |= QUIRK_NZ_ID;
+
+		}
+		else {
+
+			if (!RD16(ip4->id)) pk.quirks |= QUIRK_ZERO_ID;
+
+		}
+
+		pk.tot_hdr = hdr_len;
+
+		tcp = (struct tcp_hdr*)(data + hdr_len);
+		packet_len -= hdr_len;
+
+	}
+	else if ((*data >> 4) == IP_VER6) {
+
+		/************************
+		* IPv6 header parsing. *
+		************************/
+
+		const struct ipv6_hdr* ip6 = (struct ipv6_hdr*)data;
+		u32 ver_tos = ntohl(RD32(ip6->ver_tos));
+		u32 tot_len = ntohs(RD16(ip6->pay_len)) + sizeof(struct ipv6_hdr);
+
+		/* If the packet claims to be shorter than what we received off the wire,
+		honor this claim to account for etherleak-type bugs. */
+
+		if (packet_len > tot_len) {
+			packet_len = tot_len;
+			// DEBUG("[#] ipv6.tot_len = %u, adjusted accordingly.\n", tot_len);
+		}
+
+		/* Bail out if the result leaves no room for IPv6 + TCP headers. */
+
+		if (packet_len < MIN_TCP6) {
+			DEBUG("[#] packet_len = %u. Too short for IPv6 + TCP, giving up!\n",
+				packet_len);
+			return;
+		}
+
+		/* If the packet claims to be longer than the data we have, best to back
+		off - even though we could just ignore this and recover. */
+
+		if (tot_len > packet_len) {
+			DEBUG("[#] ipv6.tot_len = %u but packet_len = %u, bailing out!\n",
+				tot_len, packet_len);
+			return;
+		}
+
+		/* Bail out if the subsequent protocol is not TCP. One day, we may try
+		to parse and skip IPv6 extensions, but there seems to be no point in
+		it today. */
+
+		if (ip6->proto != PROTO_TCP) {
+			DEBUG("[#] IPv6 packet with non-TCP payload (%u).\n", ip6->proto);
+			return;
+		}
+
+		/* Store some relevant information about the packet. */
+
+		pk.ip_ver = IP_VER6;
+
+		pk.ip_opt_len = 0;
+
+		memcpy(pk.src, ip6->src, 16);
+		memcpy(pk.dst, ip6->dst, 16);
+
+		pk.tos = (ver_tos >> 22) & 0x3F;
+
+		pk.ttl = ip6->ttl;
+
+		if (ver_tos & 0xFFFFF) pk.quirks |= QUIRK_FLOW;
+
+		if ((ver_tos >> 20) & (IP_TOS_CE | IP_TOS_ECT)) pk.quirks |= QUIRK_ECN;
+
+		pk.tot_hdr = sizeof(struct ipv6_hdr);
+
+		tcp = (struct tcp_hdr*)(ip6 + 1);
+		packet_len -= sizeof(struct ipv6_hdr);
+
+	}
+	else {
+
+		if (!bad_packets) {
+			WARN("Unknown packet type %u, link detection issue?", *data >> 4);
+			bad_packets = 1;
+		}
+
+		return;
+
+	}
+
+	/***************
+	* TCP parsing *
+	***************/
+
+	data = (u8*)tcp;
+
+	tcp_doff = (tcp->doff_rsvd >> 4) * 4;
+
+	/* As usual, let's start with sanity checks. */
+
+	if (tcp_doff < sizeof(struct tcp_hdr)) {
+		DEBUG("[#] tcp.hdr_len = %u, not enough for TCP!\n", tcp_doff);
+		return;
+	}
+
+	if (tcp_doff > packet_len) {
+		DEBUG("[#] tcp.hdr_len = %u, past end of packet!\n", tcp_doff);
+		return;
+	}
+
+	pk.tot_hdr += tcp_doff;
+
+	pk.sport = ntohs(RD16(tcp->sport));
+	pk.dport = ntohs(RD16(tcp->dport));
+
+	pk.tcp_type = tcp->flags & (TCP_SYN | TCP_ACK | TCP_FIN | TCP_RST);
+
+	/* NUL, SYN+FIN, SYN+RST, FIN+RST, etc, should go to /dev/null. */
+
+	if (((tcp->flags & TCP_SYN) && (tcp->flags & (TCP_FIN | TCP_RST))) ||
+		((tcp->flags & TCP_FIN) && (tcp->flags & TCP_RST)) ||
+		!pk.tcp_type) {
+
+		DEBUG("[#] Silly combination of TCP flags: 0x%02x.\n", tcp->flags);
+		return;
+
+	}
+
+	pk.win = ntohs(RD16(tcp->win));
+
+	pk.seq = ntohl(RD32(tcp->seq));
+
+	/* Take note of miscellanous features and quirks. */
+
+	if ((tcp->flags & (TCP_ECE | TCP_CWR)) ||
+		(tcp->doff_rsvd & TCP_NS_RES)) pk.quirks |= QUIRK_ECN;
+
+	if (!pk.seq) pk.quirks |= QUIRK_ZERO_SEQ;
+
+	if (tcp->flags & TCP_ACK) {
+
+		if (!RD32(tcp->ack)) pk.quirks |= QUIRK_ZERO_ACK;
+
+	}
+	else {
+
+		/* A good proportion of RSTs tend to have "illegal" ACK numbers, so
+		ignore these. */
+
+		if (RD32(tcp->ack) & !(tcp->flags & TCP_RST)) {
+
+			DEBUG("[#] Non-zero ACK on a non-ACK packet: 0x%08x.\n",
+				ntohl(RD32(tcp->ack)));
+
+			pk.quirks |= QUIRK_NZ_ACK;
+
+		}
+
+	}
+
+	if (tcp->flags & TCP_URG) {
+
+		pk.quirks |= QUIRK_URG;
+
+	}
+	else {
+
+		if (RD16(tcp->urg)) {
+
+			DEBUG("[#] Non-zero UPtr on a non-URG packet: 0x%08x.\n",
+				ntohl(RD16(tcp->urg)));
+
+			pk.quirks |= QUIRK_NZ_URG;
+
+		}
+
+	}
+
+	if (tcp->flags & TCP_PUSH) pk.quirks |= QUIRK_PUSH;
+
+	/* Handle payload data. */
+
+	if (tcp_doff == packet_len) {
+
+		pk.payload = NULL;
+		pk.pay_len = 0;
+
+	}
+	else {
+
+		pk.payload = (u8*)data + tcp_doff;
+		pk.pay_len = packet_len - tcp_doff;
+
+	}
+
+	/**********************
+	* TCP option parsing *
+	**********************/
+
+	opt_end = (u8*)data + tcp_doff; /* First byte of non-option data */
+	data = (u8*)(tcp + 1);
+
+	pk.opt_cnt = 0;
+	pk.opt_eol_pad = 0;
+	pk.mss = 0;
+	pk.wscale = 0;
+	pk.ts1 = 0;
+
+	/* Option parsing problems are non-fatal, but we want to keep track of
+	them to spot buggy TCP stacks. */
+
+	while (data < opt_end && pk.opt_cnt < MAX_TCP_OPT) {
+
+		pk.opt_layout[pk.opt_cnt++] = *data;
+
+		switch (*data++) {
+
+		case TCPOPT_EOL:
+
+			/* EOL is a single-byte option that aborts further option parsing.
+			Take note of how many bytes of option data are left, and if any of
+			them are non-zero. */
+
+			pk.opt_eol_pad = opt_end - data;
+
+			while (data < opt_end && !*data++);
+
+			if (data != opt_end) {
+				pk.quirks |= QUIRK_OPT_EOL_NZ;
+				data = opt_end;
+			}
+
+			break;
+
+		case TCPOPT_NOP:
+
+			/* NOP is a single-byte option that does nothing. */
+
+			break;
+
+		case TCPOPT_MAXSEG:
+
+			/* MSS is a four-byte option with specified size. */
+
+			if (*data != 4) {
+				DEBUG("[#] MSS option expected to have 4 bytes, not %u.\n", *data);
+				pk.quirks |= QUIRK_OPT_BAD;
+			}
+
+			if (data + 3 > opt_end) {
+				DEBUG("[#] MSS option would end past end of header (%u left).\n",
+					opt_end - data);
+				goto abort_options;
+			}
+
+			pk.mss = ntohs(RD16p(data + 1));
+
+			data += 3;
+
+			break;
+
+		case TCPOPT_WSCALE:
+
+			/* WS is a three-byte option with specified size. */
+
+			if (*data != 3) {
+				DEBUG("[#] MSS option expected to have 3 bytes, not %u.\n", *data);
+				pk.quirks |= QUIRK_OPT_BAD;
+			}
+
+			if (data + 2 > opt_end) {
+				DEBUG("[#] WS option would end past end of header (%u left).\n",
+					opt_end - data);
+				goto abort_options;
+			}
+
+			pk.wscale = data[1];
+
+			if (pk.wscale > 14) pk.quirks |= QUIRK_OPT_EXWS;
+
+			data += 2;
+
+			break;
+
+		case TCPOPT_SACKOK:
+
+			/* SACKOK is a two-byte option with specified size. */
+
+			if (*data != 2) {
+				DEBUG("[#] SACKOK option expected to have 2 bytes, not %u.\n", *data);
+				pk.quirks |= QUIRK_OPT_BAD;
+			}
+
+			if (data + 1 > opt_end) {
+				DEBUG("[#] SACKOK option would end past end of header (%u left).\n",
+					opt_end - data);
+				goto abort_options;
+			}
+
+			data++;
+
+			break;
+
+		case TCPOPT_SACK:
+
+			/* SACK is a variable-length option of 10 to 34 bytes. Because we don't
+			know the size any better, we need to bail out if it looks wonky. */
+
+			if (*data < 10 || *data > 34) {
+				DEBUG("[#] SACK length out of range (%u), bailing out.\n", *data);
+				goto abort_options;
+			}
+
+			if (data - 1 + *data > opt_end) {
+				DEBUG("[#] SACK option (len %u) is too long (%u left).\n",
+					*data, opt_end - data);
+				goto abort_options;
+			}
+
+			data += *data - 1;
+
+			break;
+
+		case TCPOPT_TSTAMP:
+
+			/* Timestamp is a ten-byte option with specified size. */
+
+			if (*data != 10) {
+				DEBUG("[#] TStamp option expected to have 10 bytes, not %u.\n",
+					*data);
+				pk.quirks |= QUIRK_OPT_BAD;
+			}
+
+			if (data + 9 > opt_end) {
+				DEBUG("[#] TStamp option would end past end of header (%u left).\n",
+					opt_end - data);
+				goto abort_options;
+			}
+
+			pk.ts1 = ntohl(RD32p(data + 1));
+
+			if (!pk.ts1) pk.quirks |= QUIRK_OPT_ZERO_TS1;
+
+			if (pk.tcp_type == TCP_SYN && RD32p(data + 5)) {
+
+				DEBUG("[#] Non-zero second timestamp: 0x%08x.\n",
+					ntohl(*(u32*)(data + 5)));
+
+				pk.quirks |= QUIRK_OPT_NZ_TS2;
+
+			}
+
+			data += 9;
+
+			break;
+
+		default:
+
+			/* Unknown option, presumably with specified size. */
+
+			if (*data < 2 || *data > 40) {
+				DEBUG("[#] Unknown option 0x%02x has invalid length %u.\n",
+					data[-1], *data);
+				goto abort_options;
+			}
+
+			if (data - 1 + *data > opt_end) {
+				DEBUG("[#] Unknown option 0x%02x (len %u) is too long (%u left).\n",
+					data[-1], *data, opt_end - data);
+				goto abort_options;
+			}
+
+			data += *data - 1;
+
+		}
+
+	}
+
+	if (data != opt_end) {
+
+	abort_options:
+
+		DEBUG("[#] Option parsing aborted (cnt = %u, remainder = %u).\n",
+			pk.opt_cnt, opt_end - data);
+
+		pk.quirks |= QUIRK_OPT_BAD;
+
+	}
+
+	flow_dispatch(&pk);
 }
 
 #ifdef USE_LIBPCAP
@@ -214,14 +720,10 @@ static void find_offset(const u8* data, s32 total_len) {
    in a protocol-agnostic buffer that will be then examined upstream. */
 
 void parse_packet(void* junk, const struct pcap_pkthdr* hdr, const u8* data) {
-
   struct tcp_hdr* tcp;
   struct packet_data pk;
 
   s32 packet_len;
-  u32 tcp_doff;
-
-  u8* opt_end;
 
   packet_cnt++;
 
@@ -277,495 +779,7 @@ void parse_packet(void* junk, const struct pcap_pkthdr* hdr, const u8* data) {
   }
 #endif
 
-  /* If there is no way we could have received a complete TCP packet, bail
-     out early. */
-
-  if (packet_len < MIN_TCP4) {
-    DEBUG("[#] Packet too short for any IPv4 + TCP headers, giving up!\n");
-    return;
-  }
-
-  pk.quirks = 0;
-
-  if ((*data >> 4) == IP_VER4) {
-
-    /************************
-     * IPv4 header parsing. *
-     ************************/
-    
-    const struct ipv4_hdr* ip4 = (struct ipv4_hdr*)data;
-
-    u32 hdr_len = (ip4->ver_hlen & 0x0F) * 4;
-    u16 flags_off = ntohs(RD16(ip4->flags_off));
-    u16 tot_len = ntohs(RD16(ip4->tot_len));
-
-    /* If the packet claims to be shorter than what we received off the wire,
-       honor this claim to account for etherleak-type bugs. */
-
-    if (packet_len > tot_len) {
-      packet_len = tot_len;
-      // DEBUG("[#] ipv4.tot_len = %u, adjusted accordingly.\n", tot_len);
-    }
-
-    /* Bail out if the result leaves no room for IPv4 + TCP headers. */
-
-    if (packet_len < MIN_TCP4) {
-      DEBUG("[#] packet_len = %u. Too short for IPv4 + TCP, giving up!\n",
-            packet_len);
-      return;
-    }
-
-    /* Bail out if the declared length of IPv4 headers is nonsensical. */
-
-    if (hdr_len < sizeof(struct ipv4_hdr)) {
-      DEBUG("[#] ipv4.hdr_len = %u. Too short for IPv4, giving up!\n",
-            hdr_len);
-      return;
-    }
-
-    /* If the packet claims to be longer than the recv buffer, best to back
-       off - even though we could just ignore this and recover. */
-
-    if (tot_len > packet_len) {
-      DEBUG("[#] ipv4.tot_len = %u but packet_len = %u, bailing out!\n",
-            tot_len, packet_len);
-      return;
-    }
-
-    /* And finally, bail out if after skipping the IPv4 header as specified
-       (including options), there wouldn't be enough room for TCP. */
-
-    if (hdr_len + sizeof(struct tcp_hdr) > packet_len) {
-      DEBUG("[#] ipv4.hdr_len = %u, packet_len = %d, no room for TCP!\n",
-            hdr_len, packet_len);
-      return;
-    }
-
-    /* Bail out if the subsequent protocol is not TCP. */
-
-    if (ip4->proto != PROTO_TCP) {
-      DEBUG("[#] Whoa, IPv4 packet with non-TCP payload (%u)?\n", ip4->proto);
-      return;
-    }
-
-    /* Ignore any traffic with MF or non-zero fragment offset specified. We
-       can do enough just fingerprinting the non-fragmented traffic. */
-
-    if (flags_off & ~(IP4_DF | IP4_MBZ)) {
-      DEBUG("[#] Packet fragment (0x%04x), letting it slide!\n", flags_off);
-      return;
-    }
-
-    /* Store some relevant information about the packet. */
-
-    pk.ip_ver = IP_VER4;
-
-    pk.ip_opt_len = hdr_len - 20;
-
-    memcpy(pk.src, ip4->src, 4);
-    memcpy(pk.dst, ip4->dst, 4);
-
-    pk.tos = ip4->tos_ecn >> 2;
-
-    pk.ttl = ip4->ttl;
-
-    if (ip4->tos_ecn & (IP_TOS_CE | IP_TOS_ECT)) pk.quirks |= QUIRK_ECN;
-
-    /* Tag some of the corner cases associated with implementation quirks. */
-    
-    if (flags_off & IP4_MBZ) pk.quirks |= QUIRK_NZ_MBZ;
-
-    if (flags_off & IP4_DF) {
-
-      pk.quirks |= QUIRK_DF;
-      if (RD16(ip4->id)) pk.quirks |= QUIRK_NZ_ID;
-
-    } else {
-
-      if (!RD16(ip4->id)) pk.quirks |= QUIRK_ZERO_ID;
-
-    }
-
-    pk.tot_hdr = hdr_len;
-
-    tcp = (struct tcp_hdr*)(data + hdr_len);
-    packet_len -= hdr_len;
-    
-  } else if ((*data >> 4) == IP_VER6) {
-
-    /************************
-     * IPv6 header parsing. *
-     ************************/
-    
-    const struct ipv6_hdr* ip6 = (struct ipv6_hdr*)data;
-    u32 ver_tos = ntohl(RD32(ip6->ver_tos));
-    u32 tot_len = ntohs(RD16(ip6->pay_len)) + sizeof(struct ipv6_hdr);
-
-    /* If the packet claims to be shorter than what we received off the wire,
-       honor this claim to account for etherleak-type bugs. */
-
-    if (packet_len > tot_len) {
-      packet_len = tot_len;
-      // DEBUG("[#] ipv6.tot_len = %u, adjusted accordingly.\n", tot_len);
-    }
-
-    /* Bail out if the result leaves no room for IPv6 + TCP headers. */
-
-    if (packet_len < MIN_TCP6) {
-      DEBUG("[#] packet_len = %u. Too short for IPv6 + TCP, giving up!\n",
-            packet_len);
-      return;
-    }
-
-    /* If the packet claims to be longer than the data we have, best to back
-       off - even though we could just ignore this and recover. */
-
-    if (tot_len > packet_len) {
-      DEBUG("[#] ipv6.tot_len = %u but packet_len = %u, bailing out!\n",
-            tot_len, packet_len);
-      return;
-    }
-
-    /* Bail out if the subsequent protocol is not TCP. One day, we may try
-       to parse and skip IPv6 extensions, but there seems to be no point in
-       it today. */
-
-    if (ip6->proto != PROTO_TCP) {
-      DEBUG("[#] IPv6 packet with non-TCP payload (%u).\n", ip6->proto);
-      return;
-    }
-
-    /* Store some relevant information about the packet. */
-
-    pk.ip_ver = IP_VER6;
-
-    pk.ip_opt_len = 0;
-
-    memcpy(pk.src, ip6->src, 16);
-    memcpy(pk.dst, ip6->dst, 16);
-
-    pk.tos = (ver_tos >> 22) & 0x3F;
-
-    pk.ttl = ip6->ttl;
-
-    if (ver_tos & 0xFFFFF) pk.quirks |= QUIRK_FLOW;
-
-    if ((ver_tos >> 20) & (IP_TOS_CE | IP_TOS_ECT)) pk.quirks |= QUIRK_ECN;
-
-    pk.tot_hdr = sizeof(struct ipv6_hdr);
-
-    tcp = (struct tcp_hdr*)(ip6 + 1);
-    packet_len -= sizeof(struct ipv6_hdr);
-
-  } else {
-
-    if (!bad_packets) {
-      WARN("Unknown packet type %u, link detection issue?", *data >> 4);
-      bad_packets = 1;
-    }
-
-    return;
-
-  }
-
-  /***************
-   * TCP parsing *
-   ***************/
-
-  data = (u8*)tcp;
-
-  tcp_doff = (tcp->doff_rsvd >> 4) * 4;
-
-  /* As usual, let's start with sanity checks. */
-
-  if (tcp_doff < sizeof(struct tcp_hdr)) {
-    DEBUG("[#] tcp.hdr_len = %u, not enough for TCP!\n", tcp_doff);
-    return;
-  }
-
-  if (tcp_doff > packet_len) {
-    DEBUG("[#] tcp.hdr_len = %u, past end of packet!\n", tcp_doff);
-    return;
-  }
-
-  pk.tot_hdr += tcp_doff;
-
-  pk.sport = ntohs(RD16(tcp->sport));
-  pk.dport = ntohs(RD16(tcp->dport));
-
-  pk.tcp_type = tcp->flags & (TCP_SYN | TCP_ACK | TCP_FIN | TCP_RST);
-
-  /* NUL, SYN+FIN, SYN+RST, FIN+RST, etc, should go to /dev/null. */
-
-  if (((tcp->flags & TCP_SYN) && (tcp->flags & (TCP_FIN | TCP_RST))) ||
-      ((tcp->flags & TCP_FIN) && (tcp->flags & TCP_RST)) ||
-      !pk.tcp_type) {
-
-    DEBUG("[#] Silly combination of TCP flags: 0x%02x.\n", tcp->flags);
-    return;
-
-  }
-
-  pk.win = ntohs(RD16(tcp->win));
-
-  pk.seq = ntohl(RD32(tcp->seq));
-
-  /* Take note of miscellanous features and quirks. */
-
-  if ((tcp->flags & (TCP_ECE | TCP_CWR)) || 
-      (tcp->doff_rsvd & TCP_NS_RES)) pk.quirks |= QUIRK_ECN;
-
-  if (!pk.seq) pk.quirks |= QUIRK_ZERO_SEQ;
-
-  if (tcp->flags & TCP_ACK) {
-
-    if (!RD32(tcp->ack)) pk.quirks |= QUIRK_ZERO_ACK;
-
-  } else {
-
-    /* A good proportion of RSTs tend to have "illegal" ACK numbers, so
-       ignore these. */
-
-    if (RD32(tcp->ack) & !(tcp->flags & TCP_RST)) {
-
-      DEBUG("[#] Non-zero ACK on a non-ACK packet: 0x%08x.\n",
-            ntohl(RD32(tcp->ack)));
-
-      pk.quirks |= QUIRK_NZ_ACK;
-
-    }
-
-  }
-
-  if (tcp->flags & TCP_URG) {
-
-    pk.quirks |= QUIRK_URG;
-
-  } else {
-
-    if (RD16(tcp->urg)) {
-
-      DEBUG("[#] Non-zero UPtr on a non-URG packet: 0x%08x.\n",
-            ntohl(RD16(tcp->urg)));
-
-      pk.quirks |= QUIRK_NZ_URG;
-
-    }
-
-  }
-
-  if (tcp->flags & TCP_PUSH) pk.quirks |= QUIRK_PUSH;
-
-  /* Handle payload data. */
-
-  if (tcp_doff == packet_len) {
-
-    pk.payload = NULL;
-    pk.pay_len = 0;
-
-  } else {
-
-    pk.payload = (u8*)data + tcp_doff;
-    pk.pay_len = packet_len - tcp_doff;
-
-  }
-
-  /**********************
-   * TCP option parsing *
-   **********************/
-
-  opt_end = (u8*)data + tcp_doff; /* First byte of non-option data */
-  data = (u8*)(tcp + 1);
-
-  pk.opt_cnt     = 0;
-  pk.opt_eol_pad = 0;
-  pk.mss         = 0;
-  pk.wscale      = 0;
-  pk.ts1         = 0;
-
-  /* Option parsing problems are non-fatal, but we want to keep track of
-     them to spot buggy TCP stacks. */
-
-  while (data < opt_end && pk.opt_cnt < MAX_TCP_OPT) {
-
-    pk.opt_layout[pk.opt_cnt++] = *data;
-
-    switch (*data++) {
-
-      case TCPOPT_EOL:
-
-        /* EOL is a single-byte option that aborts further option parsing.
-           Take note of how many bytes of option data are left, and if any of
-           them are non-zero. */
-
-        pk.opt_eol_pad = opt_end - data;
-        
-        while (data < opt_end && !*data++);
-
-        if (data != opt_end) {
-          pk.quirks |= QUIRK_OPT_EOL_NZ;
-          data = opt_end;
-        }
-
-        break;
-
-      case TCPOPT_NOP:
-
-        /* NOP is a single-byte option that does nothing. */
-
-        break;
-  
-      case TCPOPT_MAXSEG:
-
-        /* MSS is a four-byte option with specified size. */
-
-        if (*data != 4) {
-          DEBUG("[#] MSS option expected to have 4 bytes, not %u.\n", *data);
-          pk.quirks |= QUIRK_OPT_BAD;
-        }
-
-        if (data + 3 > opt_end) {
-          DEBUG("[#] MSS option would end past end of header (%u left).\n",
-                opt_end - data);
-          goto abort_options;
-        }
-
-        pk.mss = ntohs(RD16p(data+1));
-
-        data += 3;
-
-        break;
-
-      case TCPOPT_WSCALE:
-
-        /* WS is a three-byte option with specified size. */
-
-        if (*data != 3) {
-          DEBUG("[#] MSS option expected to have 3 bytes, not %u.\n", *data);
-          pk.quirks |= QUIRK_OPT_BAD;
-        }
-
-        if (data + 2 > opt_end) {
-          DEBUG("[#] WS option would end past end of header (%u left).\n",
-                opt_end - data);
-          goto abort_options;
-        }
-
-        pk.wscale = data[1];
-
-        if (pk.wscale > 14) pk.quirks |= QUIRK_OPT_EXWS;
-
-        data += 2;
-
-        break;
-
-      case TCPOPT_SACKOK:
-
-        /* SACKOK is a two-byte option with specified size. */
-
-        if (*data != 2) {
-          DEBUG("[#] SACKOK option expected to have 2 bytes, not %u.\n", *data);
-          pk.quirks |= QUIRK_OPT_BAD;
-        }
-
-        if (data + 1 > opt_end) {
-          DEBUG("[#] SACKOK option would end past end of header (%u left).\n",
-                opt_end - data);
-          goto abort_options;
-        }
-
-        data++;
-
-        break;
-
-      case TCPOPT_SACK:
-
-        /* SACK is a variable-length option of 10 to 34 bytes. Because we don't
-           know the size any better, we need to bail out if it looks wonky. */
-
-        if (*data < 10 || *data > 34) {
-          DEBUG("[#] SACK length out of range (%u), bailing out.\n", *data);
-          goto abort_options;
-        }
-
-        if (data - 1 + *data > opt_end) {
-          DEBUG("[#] SACK option (len %u) is too long (%u left).\n",
-                *data, opt_end - data);
-          goto abort_options;
-        }
-
-        data += *data - 1;
-
-        break;
-
-      case TCPOPT_TSTAMP:
-
-        /* Timestamp is a ten-byte option with specified size. */
-
-        if (*data != 10) {
-          DEBUG("[#] TStamp option expected to have 10 bytes, not %u.\n",
-                *data);
-          pk.quirks |= QUIRK_OPT_BAD;
-        }
-
-        if (data + 9 > opt_end) {
-          DEBUG("[#] TStamp option would end past end of header (%u left).\n",
-                opt_end - data);
-          goto abort_options;
-        }
-
-        pk.ts1 = ntohl(RD32p(data + 1));
-
-        if (!pk.ts1) pk.quirks |= QUIRK_OPT_ZERO_TS1;
-
-        if (pk.tcp_type == TCP_SYN && RD32p(data + 5)) {
-
-          DEBUG("[#] Non-zero second timestamp: 0x%08x.\n",
-                ntohl(*(u32*)(data + 5)));
-
-          pk.quirks |= QUIRK_OPT_NZ_TS2;
-
-        }
-
-        data += 9;
-
-        break;
-
-      default:
-
-        /* Unknown option, presumably with specified size. */
-
-        if (*data < 2 || *data > 40) {
-          DEBUG("[#] Unknown option 0x%02x has invalid length %u.\n",
-                data[-1], *data);
-          goto abort_options;
-        }
-
-        if (data - 1 + *data > opt_end) {
-          DEBUG("[#] Unknown option 0x%02x (len %u) is too long (%u left).\n",
-                data[-1], *data, opt_end - data);
-          goto abort_options;
-        }
-
-        data += *data - 1;
-
-    }
-
-  }
-
-  if (data != opt_end) {
-
-abort_options:
-
-    DEBUG("[#] Option parsing aborted (cnt = %u, remainder = %u).\n",
-          pk.opt_cnt, opt_end - data);
-
-    pk.quirks |= QUIRK_OPT_BAD;
-
-  }
-
-  flow_dispatch(&pk);
-
+  process_packet(data, packet_len);
 }
 #elif defined(USE_LIBMNL)
 int parse_attr_cb(const struct nlattr *attr, void *data)
@@ -820,6 +834,7 @@ int parse_packet(const struct nlmsghdr *nlh, void *data)
 	struct nlattr *tb[NFULA_MAX + 1] = {};
 	struct nfulnl_msg_packet_hdr *ph = NULL;
 	const char *prefix = NULL;
+	const u8* payload = NULL;
 	uint32_t mark = 0;
 
 	mnl_attr_parse(nlh, sizeof(struct nfgenmsg), parse_attr_cb, tb);
@@ -829,14 +844,19 @@ int parse_packet(const struct nlmsghdr *nlh, void *data)
 		prefix = mnl_attr_get_str(tb[NFULA_PREFIX]);
 	if (tb[NFULA_MARK])
 		mark = ntohl(mnl_attr_get_u32(tb[NFULA_MARK]));
+	if (tb[NFULA_PAYLOAD]){
+		payload = mnl_attr_get_payload(tb[NFULA_PAYLOAD]);
 
-	printf("log received (prefix=\"%s\" hw=0x%04x hook=%u mark=%u)\n",
-		prefix ? prefix : "", ntohs(ph->hw_protocol), ph->hook,
-		mark);
+		process_packet(payload, mnl_attr_get_len(tb[NFULA_PAYLOAD]));
 
-	packet_cnt++;
+		printf("log received (prefix=\"%s\" hw=0x%04x hook=%u mark=%u)\n",
+			prefix ? prefix : "", ntohs(ph->hw_protocol), ph->hook,
+			mark);
 
-	if (!(packet_cnt % EXPIRE_INTERVAL)) expire_cache();
+		packet_cnt++;
+
+		if (!(packet_cnt % EXPIRE_INTERVAL)) expire_cache();
+	}
 
 	return MNL_CB_OK;
 }
