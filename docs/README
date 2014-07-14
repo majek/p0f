@@ -93,7 +93,7 @@ http://lcamtuf.coredump.cx/p0f3/
  - One sided stream support (SYN+ACK not required)
  - Capture buffer size increased to fix crash on heavily loaded systems.
  - epoll support for increased performance and scalability (increased API connections)
- - optional support for using libmnl instead of libpcap
+ - optional support for using libmnl instead of libpcap (tiny cpu usage, no ENOBUFS issues)
  
  This forks releases are possibly production ready, a version of it is in use at http://www.x4b.net/
  
