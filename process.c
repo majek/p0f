@@ -50,8 +50,44 @@ static struct host_data *host_by_age,   /* All host entries, by last mod      */
 static struct packet_flow *flow_by_age, /* All flows, by creation time        */
                           *newest_flow; /* Tail of the list                   */
 
+#ifdef USE_LIBPCAP
 static struct timeval* cur_time;        /* Current time, courtesy of pcap     */
 
+#define CURTIME_SEC cur_time->tv_sec
+#define CURTIME_USEC cur_time->tv_usec
+#else
+static struct timeval cur_time;         /* Current time, courtesy of libmnl   */
+
+#define CURTIME_SEC cur_time.tv_sec
+#define CURTIME_USEC cur_time.tv_usec
+
+/* Structure used to swap the bytes in a 64-bit unsigned long long. */
+union byteswap_64_u {
+	unsigned long long a;
+	uint32_t b[2];
+};
+
+/* Function to byteswap big endian 64bit unsigned integers
+* back to little endian host order on little endian machines.
+* As above, on big endian machines this will be a null macro.
+* The macro ntohll() is defined in byteorder64.h, and if needed,
+* refers to _ntohll() here.
+*
+* Source: http://www.opensource.apple.com/source/CyrusIMAP/CyrusIMAP-187/cyrus_imap/lib/byteorder64.c?txt
+*/
+unsigned long long ntohll(unsigned long long x)
+{
+	union byteswap_64_u u1;
+	union byteswap_64_u u2;
+
+	u1.a = x;
+
+	u2.b[1] = ntohl(u1.b[0]);
+	u2.b[0] = ntohl(u1.b[1]);
+
+	return u2.a;
+}
+#endif
 /* Bucketed hosts and flows: */
 
 static struct host_data    *host_b[HOST_BUCKETS];
@@ -68,14 +104,14 @@ static void expire_cache(void);
 
 u64 get_unix_time_ms(void) {
 
-  return ((u64)cur_time->tv_sec) * 1000 + (cur_time->tv_usec / 1000);
+  return ((u64)CURTIME_SEC) * 1000 + (CURTIME_USEC / 1000);
 }
 
 
 /* Get unix time in seconds. */
 
 u32 get_unix_time(void) {
-  return cur_time->tv_sec;
+  return CURTIME_SEC;
 }
 
 /* Convert IPv4 or IPv6 address to a human-readable form. */
@@ -846,6 +882,15 @@ int parse_packet(const struct nlmsghdr *nlh, void *data)
 		mark = ntohl(mnl_attr_get_u32(tb[NFULA_MARK]));
 	if (tb[NFULA_PAYLOAD]){
 		payload = mnl_attr_get_payload(tb[NFULA_PAYLOAD]);
+
+		if (tb[NFULA_TIMESTAMP]){
+			struct nfulnl_msg_packet_timestamp *timestamp = mnl_attr_get_str(tb[NFULA_TIMESTAMP]);
+			CURTIME_SEC = ntohll(timestamp->sec);
+			CURTIME_USEC = ntohll(timestamp->usec);
+		}
+		else{
+			gettimeofday(&cur_time, NULL);
+		}
 
 		process_packet(payload, mnl_attr_get_len(tb[NFULA_PAYLOAD]));
 
