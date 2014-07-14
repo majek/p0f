@@ -20,6 +20,10 @@
 /* Use epoll, enable only if available */
 #define USE_EPOLL
 
+/* Use pcap or libmnl */
+#define USE_LIBNML
+//#define USE_LIBPCAP
+
 /* Default location of p0f.fp: */
 
 #ifndef FP_FILE
