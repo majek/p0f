@@ -33,6 +33,7 @@
 #include <sys/wait.h>
 #include <netinet/in.h>
 
+#ifdef USE_LIBPCAP
 //TODO: compile option for linux options
 #define NETLINK_NO_ENOBUFS	5
 
@@ -46,6 +47,14 @@
 #else
 #  include <pcap-bpf.h>
 #endif /* !NET_BPF */
+#endif
+#ifdef USE_LIBNML
+#include <arpa/inet.h>
+
+#include <libmnl/libmnl.h>
+#include <linux/netfilter.h>
+#include <linux/netfilter/nfnetlink.h>
+#endif
 
 #include "types.h"
 #include "debug.h"
@@ -107,9 +116,15 @@ u8 daemon_mode;                         /* Running in daemon mode?            */
 
 static u8 set_promisc;                  /* Use promiscuous mode?              */
          
+#ifdef USE_LIBPCAP
 static pcap_t *pt;                      /* PCAP capture thingy                */
 
 s32 link_type;                          /* PCAP link type                     */
+
+#elif USE_LIBMNL
+struct mnl_socket mnlsock;              /* Netlink socket */
+
+#endif
 
 u32 hash_seed;                          /* Hash seed                          */
 
@@ -135,8 +150,10 @@ static void usage(void) {
 "Network interface options:\n"
 "\n"
 "  -i iface  - listen on the specified network interface\n"
+#ifdef USE_LIBPCAP
 "  -r file   - read offline pcap data from a given file\n"
 "  -p        - put the listening interface in promiscuous mode\n"
+#endif
 "  -L        - list all available interfaces\n"
 "\n"
 "Operating mode and output settings:\n"
@@ -389,6 +406,7 @@ void add_observation_field(char* key, u8* value) {
 }
 
 
+#ifdef USE_LIBPCAP
 /* Show PCAP interface list */
 
 static void list_interfaces(void) {
@@ -438,7 +456,6 @@ static void list_interfaces(void) {
   pcap_freealldevs(dev);
 
 }
-
 
 
 #ifdef __CYGWIN__
@@ -698,7 +715,50 @@ retry_no_vlan:
   }
 
 }
+#elif USE_LIBMNL
+static void prepare_netlink(void){
+	char buf[MNL_SOCKET_BUFFER_SIZE];
+	struct nlmsghdr *nlh;
+	unsigned int portid, qnum;
 
+
+	qnum = atoi(use_iface);
+
+	nl = mnl_socket_open(NETLINK_NETFILTER);
+	if (nl == NULL) {
+		PFATAL("mnl_socket_open");
+	}
+
+	if (mnl_socket_bind(nl, 0, MNL_SOCKET_AUTOPID) < 0) {
+		PFATAL("mnl_socket_bind");
+	}
+	portid = mnl_socket_get_portid(nl);
+
+	nlh = nflog_build_cfg_pf_request(buf, NFULNL_CFG_CMD_PF_UNBIND);
+
+	if (mnl_socket_sendto(nl, nlh, nlh->nlmsg_len) < 0) {
+		PFATAL("mnl_socket_sendto");
+	}
+
+	nlh = nflog_build_cfg_pf_request(buf, NFULNL_CFG_CMD_PF_BIND);
+
+	if (mnl_socket_sendto(nl, nlh, nlh->nlmsg_len) < 0) {
+		PFATAL("mnl_socket_sendto");
+	}
+
+	nlh = nflog_build_cfg_request(buf, NFULNL_CFG_CMD_BIND, qnum);
+
+	if (mnl_socket_sendto(nl, nlh, nlh->nlmsg_len) < 0) {
+		PFATAL("mnl_socket_sendto");
+	}
+
+	nlh = nflog_build_cfg_params(buf, NFULNL_COPY_PACKET, 0xFFFF, qnum);
+
+	if (mnl_socket_sendto(nl, nlh, nlh->nlmsg_len) < 0) {
+		PFATAL("mnl_socket_sendto");
+	}
+}
+#endif
 
 /* Drop privileges and chroot(), with some sanity checks */
 
@@ -821,7 +881,12 @@ static void epoll_event_loop(void){
 
 	struct epoll_event ev;
 	struct epoll_event events[5];
+#ifdef USE_LIBPCAP
 	int pcap_fd = pcap_fileno(pt);
+#elif USE_LIBMNL
+	int pcap_fd = nlsock.fd;
+	char buf[MNL_SOCKET_BUFFER_SIZE];
+#endif
 	int res;
 
 	//Initial epoll setup
@@ -857,8 +922,27 @@ static void epoll_event_loop(void){
 			if (fd == pcap_fd){
 				//Handle PCAP event
 				if (events[n].events & EPOLLIN){
+#ifdef USE_LIBPCAP
 					if (pcap_dispatch(pt, -1, (pcap_handler)parse_packet, 0) < 0)
 						FATAL("Packet capture interface is down.");
+#elif USE_LIBMNL
+					res = mnl_socket_recvfrom(nl, buf, sizeof(buf));
+					if (res == -1) {
+						PFATAL("mnl_socket_recvfrom");
+					}
+					while (res > 0) {
+						res = mnl_cb_run(buf, res, 0, portid, parse_packet, NULL);
+						if (res < 0){
+							PFATAL("mnl_cb_run");
+						}
+
+						res = mnl_socket_recvfrom(nl, buf, sizeof(buf));
+						if (ret == -1) {
+							PFATAL("mnl_socket_recvfrom");
+						}
+					}
+#endif
+
 				}
 				else if(events[n].events & EPOLLERR || events[n].events & EPOLLHUP){
 					FATAL("Packet capture interface is down.");
@@ -893,7 +977,7 @@ static void epoll_event_loop(void){
 					}
 				}
 				else if (events[n].events & EPOLLERR || events[n].events & EPOLLHUP){
-					FATAL("Packet capture interface is down.");
+					FATAL("API socket is down.");
 				}
 			}
 			else{
@@ -1212,7 +1296,9 @@ static void live_event_loop(void) {
      in pcap_dispatch() or pcap_loop() unless there's I/O. */
 
   while (!stop_soon) {
-
+#ifndef USE_LIBPCAP
+#error Only LIBPCAP supported in Cygwin
+#endif
     s32 ret = pcap_dispatch(pt, -1, (pcap_handler)parse_packet, 0);
 
     if (ret < 0) return;
@@ -1229,7 +1315,7 @@ static void live_event_loop(void) {
 
 }
 
-
+#ifdef USE_LIBPCAP
 /* Simple event loop for processing offline captures. */
 
 static void offline_event_loop(void) {
@@ -1246,6 +1332,7 @@ static void offline_event_loop(void) {
   WARN("User-initiated shutdown.");
 
 }
+#endif
 
 
 /* Main entry point */
@@ -1446,6 +1533,7 @@ int main(int argc, char** argv) {
 
   read_config(fp_file ? fp_file : (u8*)FP_FILE);
 
+#ifdef USE_LIBPCAP
   prepare_pcap();
   if (disable_bpf) {
 	  SAYF("[+] BPF Disabled\n");
@@ -1453,6 +1541,9 @@ int main(int argc, char** argv) {
   else {
 	  prepare_bpf();
   }
+#elif USE_LIBMNL
+  prepare_netlink();
+#endif
 
   if (log_file) open_log();
   if (api_sock) open_api();
@@ -1470,7 +1561,15 @@ int main(int argc, char** argv) {
   signal(SIGINT, abort_handler);
   signal(SIGTERM, abort_handler);
 
-  if (read_file) offline_event_loop(); else live_event_loop();
+#ifdef USE_LIBPCAP
+  if (read_file) 
+	  offline_event_loop(); 
+  else 
+	  live_event_loop();
+#elif USE_LIBMNL
+  live_event_loop();
+#endif
+
 
   if (!daemon_mode)
     SAYF("\nAll done. Processed %llu packets.\n", packet_cnt);

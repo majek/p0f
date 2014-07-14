@@ -11,7 +11,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <pcap.h>
 #include <time.h>
 #include <ctype.h>
 
@@ -77,6 +76,35 @@ u32 get_unix_time(void) {
   return cur_time->tv_sec;
 }
 
+/* Convert IPv4 or IPv6 address to a human-readable form. */
+
+u8* addr_to_str(u8* data, u8 ip_ver) {
+
+	static char tmp[128];
+
+	/* We could be using inet_ntop(), but on systems that have older libc
+	but still see passing IPv6 traffic, we would be in a pickle. */
+
+	if (ip_ver == IP_VER4) {
+
+		sprintf(tmp, "%u.%u.%u.%u", data[0], data[1], data[2], data[3]);
+
+	}
+	else {
+
+		sprintf(tmp, "%x:%x:%x:%x:%x:%x:%x:%x",
+			(data[0] << 8) | data[1], (data[2] << 8) | data[3],
+			(data[4] << 8) | data[5], (data[6] << 8) | data[7],
+			(data[8] << 8) | data[9], (data[10] << 8) | data[11],
+			(data[12] << 8) | data[13], (data[14] << 8) | data[15]);
+
+	}
+
+	return (u8*)tmp;
+
+}
+
+#ifdef USE_LIBPCAP
 
 /* Find link-specific offset (pcap knows, but won't tell). */
 
@@ -181,35 +209,6 @@ static void find_offset(const u8* data, s32 total_len) {
   }
 
 }
-
-
-/* Convert IPv4 or IPv6 address to a human-readable form. */
-
-u8* addr_to_str(u8* data, u8 ip_ver) {
-
-  static char tmp[128];
-
-  /* We could be using inet_ntop(), but on systems that have older libc
-     but still see passing IPv6 traffic, we would be in a pickle. */
-
-  if (ip_ver == IP_VER4) {
-
-    sprintf(tmp, "%u.%u.%u.%u", data[0], data[1], data[2], data[3]);
-
-  } else {
-
-    sprintf(tmp, "%x:%x:%x:%x:%x:%x:%x:%x",
-            (data[0] << 8) | data[1], (data[2] << 8) | data[3], 
-            (data[4] << 8) | data[5], (data[6] << 8) | data[7], 
-            (data[8] << 8) | data[9], (data[10] << 8) | data[11], 
-            (data[12] << 8) | data[13], (data[14] << 8) | data[15]);
-
-  }
-
-  return (u8*)tmp;
-
-}
-
 
 /* Parse PCAP input, with plenty of sanity checking. Store interesting details
    in a protocol-agnostic buffer that will be then examined upstream. */
@@ -768,7 +767,29 @@ abort_options:
   flow_dispatch(&pk);
 
 }
+#elif USE_LIBMNL
+int parse_packet(const struct nlmsghdr *nlh, void *data)
+{
+	struct nlattr *tb[NFULA_MAX + 1] = {};
+	struct nfulnl_msg_packet_hdr *ph = NULL;
+	const char *prefix = NULL;
+	uint32_t mark = 0;
 
+	mnl_attr_parse(nlh, sizeof(struct nfgenmsg), parse_attr_cb, tb);
+	if (tb[NFULA_PACKET_HDR])
+		ph = mnl_attr_get_payload(tb[NFULA_PACKET_HDR]);
+	if (tb[NFULA_PREFIX])
+		prefix = mnl_attr_get_str(tb[NFULA_PREFIX]);
+	if (tb[NFULA_MARK])
+		mark = ntohl(mnl_attr_get_u32(tb[NFULA_MARK]));
+
+	printf("log received (prefix=\"%s\" hw=0x%04x hook=%u mark=%u)\n",
+		prefix ? prefix : "", ntohs(ph->hw_protocol), ph->hook,
+		mark);
+
+	return MNL_CB_OK;
+}
+#endif
 
 /* Calculate hash bucket for packet_flow. Keep the hash symmetrical: switching
    source and dest should have no effect. */
