@@ -894,7 +894,7 @@ int parse_packet(const struct nlmsghdr *nlh, void *data)
 
 		process_packet(payload, mnl_attr_get_len(tb[NFULA_PAYLOAD]));
 
-		printf("log received (prefix=\"%s\" hw=0x%04x hook=%u mark=%u)\n",
+		DEBUG("[#] log received (prefix=\"%s\" hw=0x%04x hook=%u mark=%u)\n",
 			prefix ? prefix : "", ntohs(ph->hw_protocol), ph->hook,
 			mark);
 
