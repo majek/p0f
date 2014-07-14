@@ -11,6 +11,7 @@
 #define _GNU_SOURCE
 #define _FROM_P0F
 
+#include "config.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -47,13 +48,14 @@
 #else
 #  include <pcap-bpf.h>
 #endif /* !NET_BPF */
-#endif
-#ifdef USE_LIBNML
+#elif defined(USE_LIBMNL)
 #include <arpa/inet.h>
 
 #include <libmnl/libmnl.h>
 #include <linux/netfilter.h>
 #include <linux/netfilter/nfnetlink.h>
+#else
+#error Neither LIBPCAP or LIBMNL selected
 #endif
 
 #include "types.h"
@@ -121,8 +123,8 @@ static pcap_t *pt;                      /* PCAP capture thingy                */
 
 s32 link_type;                          /* PCAP link type                     */
 
-#elif USE_LIBMNL
-struct mnl_socket mnlsock;              /* Netlink socket */
+#elif defined(USE_LIBMNL)
+struct mnl_socket nl;              /* Netlink socket */
 
 #endif
 
@@ -715,7 +717,7 @@ retry_no_vlan:
   }
 
 }
-#elif USE_LIBMNL
+#elif defined(USE_LIBMNL)
 static void prepare_netlink(void){
 	char buf[MNL_SOCKET_BUFFER_SIZE];
 	struct nlmsghdr *nlh;
@@ -883,7 +885,7 @@ static void epoll_event_loop(void){
 	struct epoll_event events[5];
 #ifdef USE_LIBPCAP
 	int pcap_fd = pcap_fileno(pt);
-#elif USE_LIBMNL
+#elif defined(USE_LIBMNL)
 	int pcap_fd = nlsock.fd;
 	char buf[MNL_SOCKET_BUFFER_SIZE];
 #endif
@@ -925,7 +927,7 @@ static void epoll_event_loop(void){
 #ifdef USE_LIBPCAP
 					if (pcap_dispatch(pt, -1, (pcap_handler)parse_packet, 0) < 0)
 						FATAL("Packet capture interface is down.");
-#elif USE_LIBMNL
+#elif defined(USE_LIBMNL)
 					res = mnl_socket_recvfrom(nl, buf, sizeof(buf));
 					if (res == -1) {
 						PFATAL("mnl_socket_recvfrom");
@@ -1541,7 +1543,7 @@ int main(int argc, char** argv) {
   else {
 	  prepare_bpf();
   }
-#elif USE_LIBMNL
+#elif defined(USE_LIBMNL)
   prepare_netlink();
 #endif
 
@@ -1566,7 +1568,7 @@ int main(int argc, char** argv) {
 	  offline_event_loop(); 
   else 
 	  live_event_loop();
-#elif USE_LIBMNL
+#elif defined(USE_LIBMNL)
   live_event_loop();
 #endif
 

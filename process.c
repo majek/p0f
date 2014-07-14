@@ -767,7 +767,7 @@ abort_options:
   flow_dispatch(&pk);
 
 }
-#elif USE_LIBMNL
+#elif defined(USE_LIBMNL)
 int parse_packet(const struct nlmsghdr *nlh, void *data)
 {
 	struct nlattr *tb[NFULA_MAX + 1] = {};

@@ -21,8 +21,8 @@
 #define USE_EPOLL
 
 /* Use pcap or libmnl */
-#define USE_LIBNML
-//#define USE_LIBPCAP
+#define USE_LIBMNL 1
+//#define USE_LIBPCAP 1
 
 /* Default location of p0f.fp: */
 

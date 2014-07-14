@@ -13,7 +13,7 @@
 
 #ifdef USE_LIBPCAP
 #include <pcap.h>
-#elif USE_LIBMNL
+#elif defined(USE_LIBMNL)
 #include <libmnl/libmnl.h>
 #endif
 
@@ -210,8 +210,8 @@ extern u64 packet_cnt;
 
 #ifdef USE_LIBPCAP
 void parse_packet(void* junk, const struct pcap_pkthdr* hdr, const u8* data);
-#elif USE_LIBMNL
-int parse_packet(const struct nlmsghdr *nlh, void *data)
+#elif defined(USE_LIBMNL)
+int parse_packet(const struct nlmsghdr *nlh, void *data);
 #endif
 
 u8* addr_to_str(u8* data, u8 ip_ver);
