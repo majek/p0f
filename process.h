@@ -11,10 +11,13 @@
 #ifndef _HAVE_PROCESS_H
 #define _HAVE_PROCESS_H
 
+#include "config.h"
 #ifdef USE_LIBPCAP
 #include <pcap.h>
 #elif defined(USE_LIBMNL)
 #include <libmnl/libmnl.h>
+#include <linux/netfilter/nfnetlink.h>
+#include <linux/netfilter/nfnetlink_log.h>
 #endif
 
 #include "types.h"

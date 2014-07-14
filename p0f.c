@@ -54,6 +54,7 @@
 #include <libmnl/libmnl.h>
 #include <linux/netfilter.h>
 #include <linux/netfilter/nfnetlink.h>
+#include <linux/netfilter/nfnetlink_log.h>
 #else
 #error Neither LIBPCAP or LIBMNL selected
 #endif
@@ -124,7 +125,9 @@ static pcap_t *pt;                      /* PCAP capture thingy                */
 s32 link_type;                          /* PCAP link type                     */
 
 #elif defined(USE_LIBMNL)
-struct mnl_socket nl;              /* Netlink socket */
+
+struct mnl_socket* nl;              /* Netlink socket */
+unsigned int portid;
 
 #endif
 
@@ -718,10 +721,157 @@ retry_no_vlan:
 
 }
 #elif defined(USE_LIBMNL)
+
+#ifdef NL_MMAP_STATUS_UNUSED //Has mmap support
+static struct nlmsghdr *nflog_build_cfg_pf_request(struct mnl_socket *nl, uint8_t command)
+{
+	struct nl_mmap_hdr *hdr;
+
+	hdr = mnl_socket_get_frame(nl, MNL_RING_TX);
+	if (hdr->nm_status != NL_MMAP_STATUS_UNUSED)
+		return NULL;
+	mnl_socket_advance_ring(nl, MNL_RING_TX);
+
+	struct nlmsghdr *nlh = mnl_nlmsg_put_header((void *)hdr + NL_MMAP_HDRLEN);
+	nlh->nlmsg_type = (NFNL_SUBSYS_ULOG << 8) | NFULNL_MSG_CONFIG;
+	nlh->nlmsg_flags = NLM_F_REQUEST;
+
+	struct nfgenmsg *nfg = mnl_nlmsg_put_extra_header(nlh, sizeof(*nfg));
+	nfg->nfgen_family = AF_INET;
+	nfg->version = NFNETLINK_V0;
+
+	struct nfulnl_msg_config_cmd cmd = {
+		.command = command,
+	};
+	mnl_attr_put(nlh, NFULA_CFG_CMD, sizeof(cmd), &cmd);
+
+	hdr->nm_len = nlh->nlmsg_len;
+	hdr->nm_status = NL_MMAP_STATUS_VALID;
+	return nlh;
+}
+
+static struct nlmsghdr *nflog_build_cfg_request(struct mnl_socket *nl, uint8_t command, int nflognum)
+{
+	struct nl_mmap_hdr *hdr;
+
+	hdr = mnl_socket_get_frame(nl, MNL_RING_TX);
+	if (hdr->nm_status != NL_MMAP_STATUS_UNUSED)
+		return NULL;
+	mnl_socket_advance_ring(nl, MNL_RING_TX);
+
+	struct nlmsghdr *nlh = mnl_nlmsg_put_header((void *)hdr + NL_MMAP_HDRLEN);
+	nlh->nlmsg_type = (NFNL_SUBSYS_ULOG << 8) | NFULNL_MSG_CONFIG;
+	nlh->nlmsg_flags = NLM_F_REQUEST;
+
+	struct nfgenmsg *nfg = mnl_nlmsg_put_extra_header(nlh, sizeof(*nfg));
+	nfg->nfgen_family = AF_INET;
+	nfg->version = NFNETLINK_V0;
+	nfg->res_id = htons(nflognum);
+
+	struct nfulnl_msg_config_cmd cmd = {
+		.command = command,
+	};
+	mnl_attr_put(nlh, NFULA_CFG_CMD, sizeof(cmd), &cmd);
+
+	hdr->nm_len = nlh->nlmsg_len;
+	hdr->nm_status = NL_MMAP_STATUS_VALID;
+	return nlh;
+}
+
+static struct nlmsghdr *nflog_build_cfg_params(struct mnl_socket *nl, uint8_t mode, int range, int nflognum)
+{
+	struct nl_mmap_hdr *hdr;
+
+	hdr = mnl_socket_get_frame(nl, MNL_RING_TX);
+	if (hdr->nm_status != NL_MMAP_STATUS_UNUSED)
+		return NULL;
+	mnl_socket_advance_ring(nl, MNL_RING_TX);
+
+	struct nlmsghdr *nlh = mnl_nlmsg_put_header((void *)hdr + NL_MMAP_HDRLEN);
+	nlh->nlmsg_type = (NFNL_SUBSYS_ULOG << 8) | NFULNL_MSG_CONFIG;
+	nlh->nlmsg_flags = NLM_F_REQUEST;
+
+	struct nfgenmsg *nfg = mnl_nlmsg_put_extra_header(nlh, sizeof(*nfg));
+	nfg->nfgen_family = AF_UNSPEC;
+	nfg->version = NFNETLINK_V0;
+	nfg->res_id = htons(nflognum);
+
+	struct nfulnl_msg_config_mode params = {
+		.copy_range = htonl(range),
+		.copy_mode = mode,
+	};
+	mnl_attr_put(nlh, NFULA_CFG_MODE, sizeof(params), &params);
+
+	hdr->nm_len = nlh->nlmsg_len;
+	hdr->nm_status = NL_MMAP_STATUS_VALID;
+	return nlh;
+}
+#else
+static struct nlmsghdr *
+nflog_build_cfg_pf_request(char *buf, uint8_t command)
+{
+	struct nlmsghdr *nlh = mnl_nlmsg_put_header(buf);
+	nlh->nlmsg_type = (NFNL_SUBSYS_ULOG << 8) | NFULNL_MSG_CONFIG;
+	nlh->nlmsg_flags = NLM_F_REQUEST;
+
+	struct nfgenmsg *nfg = mnl_nlmsg_put_extra_header(nlh, sizeof(*nfg));
+	nfg->nfgen_family = AF_INET;
+	nfg->version = NFNETLINK_V0;
+
+	struct nfulnl_msg_config_cmd cmd = {
+		.command = command,
+	};
+	mnl_attr_put(nlh, NFULA_CFG_CMD, sizeof(cmd), &cmd);
+
+	return nlh;
+}
+
+static struct nlmsghdr *
+nflog_build_cfg_request(char *buf, uint8_t command, int qnum)
+{
+	struct nlmsghdr *nlh = mnl_nlmsg_put_header(buf);
+	nlh->nlmsg_type = (NFNL_SUBSYS_ULOG << 8) | NFULNL_MSG_CONFIG;
+	nlh->nlmsg_flags = NLM_F_REQUEST;
+
+	struct nfgenmsg *nfg = mnl_nlmsg_put_extra_header(nlh, sizeof(*nfg));
+	nfg->nfgen_family = AF_INET;
+	nfg->version = NFNETLINK_V0;
+	nfg->res_id = htons(qnum);
+
+	struct nfulnl_msg_config_cmd cmd = {
+		.command = command,
+	};
+	mnl_attr_put(nlh, NFULA_CFG_CMD, sizeof(cmd), &cmd);
+
+	return nlh;
+}
+
+static struct nlmsghdr *
+nflog_build_cfg_params(char *buf, uint8_t mode, int range, int qnum)
+{
+	struct nlmsghdr *nlh = mnl_nlmsg_put_header(buf);
+	nlh->nlmsg_type = (NFNL_SUBSYS_ULOG << 8) | NFULNL_MSG_CONFIG;
+	nlh->nlmsg_flags = NLM_F_REQUEST;
+
+	struct nfgenmsg *nfg = mnl_nlmsg_put_extra_header(nlh, sizeof(*nfg));
+	nfg->nfgen_family = AF_UNSPEC;
+	nfg->version = NFNETLINK_V0;
+	nfg->res_id = htons(qnum);
+
+	struct nfulnl_msg_config_mode params = {
+		.copy_range = htonl(range),
+		.copy_mode = mode,
+	};
+	mnl_attr_put(nlh, NFULA_CFG_MODE, sizeof(params), &params);
+
+	return nlh;
+}
+#endif
+
 static void prepare_netlink(void){
 	char buf[MNL_SOCKET_BUFFER_SIZE];
 	struct nlmsghdr *nlh;
-	unsigned int portid, qnum;
+	unsigned int qnum;
 
 
 	qnum = atoi(use_iface);
@@ -886,7 +1036,7 @@ static void epoll_event_loop(void){
 #ifdef USE_LIBPCAP
 	int pcap_fd = pcap_fileno(pt);
 #elif defined(USE_LIBMNL)
-	int pcap_fd = nlsock.fd;
+	int pcap_fd = mnl_socket_get_fd(nl);
 	char buf[MNL_SOCKET_BUFFER_SIZE];
 #endif
 	int res;
@@ -939,7 +1089,7 @@ static void epoll_event_loop(void){
 						}
 
 						res = mnl_socket_recvfrom(nl, buf, sizeof(buf));
-						if (ret == -1) {
+						if (res == -1) {
 							PFATAL("mnl_socket_recvfrom");
 						}
 					}
@@ -1351,12 +1501,12 @@ int main(int argc, char** argv) {
     FATAL("Please don't make me setuid. See README for more.\n");
 
   while ((r = getopt(argc, argv, "+LS:df:i:m:o:pr:s:t:u:b")) != -1) switch (r) {
-
+#ifdef USE_PCAP
     case 'L':
 
       list_interfaces();
       exit(0);
-
+#endif
     case 'S':
 
 #ifdef __CYGWIN__

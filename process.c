@@ -768,6 +768,53 @@ abort_options:
 
 }
 #elif defined(USE_LIBMNL)
+int parse_attr_cb(const struct nlattr *attr, void *data)
+{
+	const struct nlattr **tb = data;
+	int type = mnl_attr_get_type(attr);
+
+	/* skip unsupported attribute in user-space */
+	if (mnl_attr_type_valid(attr, NFULA_MAX) < 0)
+		return MNL_CB_OK;
+
+	switch (type) {
+	case NFULA_MARK:
+	case NFULA_IFINDEX_INDEV:
+	case NFULA_IFINDEX_OUTDEV:
+	case NFULA_IFINDEX_PHYSINDEV:
+	case NFULA_IFINDEX_PHYSOUTDEV:
+		if (mnl_attr_validate(attr, MNL_TYPE_U32) < 0) {
+			perror("mnl_attr_validate");
+			return MNL_CB_ERROR;
+		}
+		break;
+	case NFULA_TIMESTAMP:
+		if (mnl_attr_validate2(attr, MNL_TYPE_UNSPEC,
+			sizeof(struct nfulnl_msg_packet_timestamp)) < 0) {
+			perror("mnl_attr_validate");
+			return MNL_CB_ERROR;
+		}
+		break;
+	case NFULA_HWADDR:
+		if (mnl_attr_validate2(attr, MNL_TYPE_UNSPEC,
+			sizeof(struct nfulnl_msg_packet_hw)) < 0) {
+			perror("mnl_attr_validate");
+			return MNL_CB_ERROR;
+		}
+		break;
+	case NFULA_PREFIX:
+		if (mnl_attr_validate(attr, MNL_TYPE_NUL_STRING) < 0) {
+			perror("mnl_attr_validate");
+			return MNL_CB_ERROR;
+		}
+		break;
+	case NFULA_PAYLOAD:
+		break;
+	}
+	tb[type] = attr;
+	return MNL_CB_OK;
+}
+
 int parse_packet(const struct nlmsghdr *nlh, void *data)
 {
 	struct nlattr *tb[NFULA_MAX + 1] = {};
@@ -786,6 +833,10 @@ int parse_packet(const struct nlmsghdr *nlh, void *data)
 	printf("log received (prefix=\"%s\" hw=0x%04x hook=%u mark=%u)\n",
 		prefix ? prefix : "", ntohs(ph->hw_protocol), ph->hook,
 		mark);
+
+	packet_cnt++;
+
+	if (!(packet_cnt % EXPIRE_INTERVAL)) expire_cache();
 
 	return MNL_CB_OK;
 }
