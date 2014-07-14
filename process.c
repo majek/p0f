@@ -868,23 +868,25 @@ int parse_attr_cb(const struct nlattr *attr, void *data)
 int parse_packet(const struct nlmsghdr *nlh, void *data)
 {
 	struct nlattr *tb[NFULA_MAX + 1] = {};
+	const u8* payload = NULL;
+	mnl_attr_parse(nlh, sizeof(struct nfgenmsg), parse_attr_cb, tb);
+	
+#ifdef DEBUG_BUILD
 	struct nfulnl_msg_packet_hdr *ph = NULL;
 	const char *prefix = NULL;
-	const u8* payload = NULL;
 	uint32_t mark = 0;
-
-	mnl_attr_parse(nlh, sizeof(struct nfgenmsg), parse_attr_cb, tb);
 	if (tb[NFULA_PACKET_HDR])
 		ph = mnl_attr_get_payload(tb[NFULA_PACKET_HDR]);
 	if (tb[NFULA_PREFIX])
 		prefix = mnl_attr_get_str(tb[NFULA_PREFIX]);
 	if (tb[NFULA_MARK])
 		mark = ntohl(mnl_attr_get_u32(tb[NFULA_MARK]));
+#endif
 	if (tb[NFULA_PAYLOAD]){
 		payload = mnl_attr_get_payload(tb[NFULA_PAYLOAD]);
 
 		if (tb[NFULA_TIMESTAMP]){
-			struct nfulnl_msg_packet_timestamp *timestamp = mnl_attr_get_str(tb[NFULA_TIMESTAMP]);
+			struct nfulnl_msg_packet_timestamp *timestamp = (struct nfulnl_msg_packet_timestamp *)mnl_attr_get_str(tb[NFULA_TIMESTAMP]);
 			CURTIME_SEC = ntohll(timestamp->sec);
 			CURTIME_USEC = ntohll(timestamp->usec);
 		}

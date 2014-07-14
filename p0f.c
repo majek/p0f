@@ -873,14 +873,16 @@ static void prepare_netlink(void){
 	struct nlmsghdr *nlh;
 	unsigned int qnum;
 
+	//Get queue
+	qnum = atoi((const char*)use_iface);
 
-	qnum = atoi(use_iface);
-
+	//open netfilter socket
 	nl = mnl_socket_open(NETLINK_NETFILTER);
 	if (nl == NULL) {
 		PFATAL("mnl_socket_open");
 	}
 
+	//setup
 	if (mnl_socket_bind(nl, 0, MNL_SOCKET_AUTOPID) < 0) {
 		PFATAL("mnl_socket_bind");
 	}
