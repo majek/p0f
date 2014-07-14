@@ -900,6 +900,13 @@ static void prepare_netlink(void){
 		PFATAL("mnl_socket_sendto");
 	}
 
+	int status = mnl_socket_setsockopt(nl, SOL_NETLINK, NETLINK_NO_ENOBUFS, &(int){1}, sizeof(int));
+	///If fails, probably not nfnetlink
+	if (status < 0){
+		FATAL("setsockopt: %s", strerror(errno));
+	//	DEBUG("PCAP overflow condition set successfully");
+	}
+
 	nlh = nflog_build_cfg_request(buf, NFULNL_CFG_CMD_BIND, qnum);
 
 	if (mnl_socket_sendto(nl, nlh, nlh->nlmsg_len) < 0) {
