@@ -1097,16 +1097,9 @@ static void epoll_event_loop(void){
 					if (res == -1) {
 						PFATAL("mnl_socket_recvfrom");
 					}
-					while (res > 0) {
-						res = mnl_cb_run(buf, res, 0, portid, parse_packet, NULL);
-						if (res < 0){
-							PFATAL("mnl_cb_run");
-						}
-
-						res = mnl_socket_recvfrom(nl, buf, sizeof(buf));
-						if (res == -1) {
-							PFATAL("mnl_socket_recvfrom");
-						}
+					res = mnl_cb_run(buf, res, 0, portid, parse_packet, NULL);
+					if (res < 0){
+						PFATAL("mnl_cb_run");
 					}
 #endif
 
