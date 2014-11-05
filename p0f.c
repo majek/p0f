@@ -176,7 +176,7 @@ static void usage(void) {
 "\n"
 #ifndef __CYGWIN__
 #ifdef USE_EPOLL
-"  -S limit  - limit number of parallel API connections, not guarunteed (%u)\n"
+"  -S limit  - default storage capacity for parallel API connections, not guarunteed (%u)\n"
 #else
 "  -S limit  - limit number of parallel API connections (%u)\n"
 #endif
@@ -1044,6 +1044,7 @@ static void epoll_event_loop(void){
 	int slots = 6 + api_max_conn;
 	ctable = ck_alloc(slots * sizeof(struct api_client));
 
+
 	struct epoll_event ev;
 	struct epoll_event events[5];
 #ifdef USE_LIBPCAP
@@ -1116,11 +1117,13 @@ static void epoll_event_loop(void){
 					if (client_sock < 0) {
 						WARN("Unable to handle API connection: accept() fails.");
 					}
-					else if (client_sock >= slots){
-						WARN("Unable to handle API connection: too many connection.");
-						close(client_sock);
-					}
 					else {
+						if (client_sock >= slots){
+							WARN("Too many connections, enlarging connection table");
+							slots *= 2;
+							ctable = ck_realloc(ctable, slots * sizeof(struct api_client));
+						}
+
 						ctable[fd].fd = client_sock;
 
 						if (fcntl(client_sock, F_SETFL, O_NONBLOCK))
@@ -1527,9 +1530,6 @@ int main(int argc, char** argv) {
         FATAL("Multiple -S options not supported.");
 
       api_max_conn = atol(optarg);
-
-      if (!api_max_conn || api_max_conn > 250)
-        FATAL("Outlandish value specified for -S.");
 
       break;
 
