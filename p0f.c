@@ -1186,10 +1186,10 @@ static void epoll_event_loop(void){
 							((char*)&ctable[fd].out_data),
 							sizeof(struct p0f_api_response));
 
-						if (fcntl(fd, F_SETFL, O_NONBLOCK))
-							PFATAL("fcntl() to set O_NONBLOCK on API connection fails.");
+						if (fcntl(fd, F_SETFL, O_NONBLOCK)){
+							PWARN("fcntl() to set O_NONBLOCK on API connection fails.");
 
-						if (res <= 0) PFATAL("write() on API socket fails despite POLLOUT.");
+						if (res <= 0) PWARN("write() on API socket fails despite POLLOUT.");
 					}
 				}
 			}
