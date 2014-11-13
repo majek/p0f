@@ -30,7 +30,8 @@
     perror("      OS message "); \
     ERRORF("\n"); \
     exit(1); \
-    }
+   } while (0)
+
 
 #define WARN(x...) do { \
     ERRORF("[!] WARNING: " x); \
