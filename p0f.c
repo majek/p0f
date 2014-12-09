@@ -1715,6 +1715,8 @@ int main(int argc, char** argv) {
   
   if (switch_user) drop_privs();
 
+  signal(SIGPIPE, SIG_IGN);
+
   if (daemon_mode) fork_off();
 
   signal(SIGHUP, daemon_mode ? SIG_IGN : abort_handler);
