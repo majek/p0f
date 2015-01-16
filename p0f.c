@@ -1174,18 +1174,18 @@ static void epoll_event_loop(void){
 					}
 				}
 				else if (events[n].events & EPOLLOUT){
-					if (ctable[fd]->in_off < sizeof(struct p0f_api_query)){
+					if (ctable[fd].in_off < sizeof(struct p0f_api_query)){
 						WARN("Inconsistent p0f_api_response state.\n");
 					}
 
-					i = write(pfds[fd].fd,
-						((char*)&ctable[cur]->out_data) + ctable[fd]->out_off,
-						sizeof(struct p0f_api_response) - ctable[fd]->out_off);
+					res = write(pfds[fd].fd,
+						((char*)&ctable[fd].out_data) + ctable[fd].out_off,
+						sizeof(struct p0f_api_response) - ctable[fd].out_off);
 
-					if (i <= 0) {
+					if (res <= 0) {
 						PWARN("write() on API socket fails despite POLLOUT.");
-						close(pfds[fd].fd);
-						ctable[fd]->fd = -1;
+						close(fd);
+						ctable[fd].fd = -1;
 						continue;
 					}
 
@@ -1193,8 +1193,8 @@ static void epoll_event_loop(void){
 
 					/* All done? Back to square zero then! */
 
-					if (ctable[cur]->out_off == sizeof(struct p0f_api_response)) {
-						ctable[cur]->in_off = ctable[cur]->out_off = 0;
+					if (ctable[cur].out_off == sizeof(struct p0f_api_response)) {
+						ctable[cur].in_off = ctable[cur].out_off = 0;
 						
 						ev.events = EPOLLIN | EPOLLERR | EPOLLHUP;
 						ev.data.fd = fd;
