@@ -1189,7 +1189,7 @@ static void epoll_event_loop(void){
 						continue;
 					}
 
-					ctable[fd]->out_off += res;
+					ctable[fd].out_off += res;
 
 					/* All done? Back to square zero then! */
 
