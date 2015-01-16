@@ -37,10 +37,11 @@ struct api_client {
   s32 fd;                               /* -1 if slot free                    */
 
   struct p0f_api_query in_data;         /* Query recv buffer                  */
-  u32 in_off;                           /* Query buffer offset                */
 
   struct p0f_api_response out_data;     /* Response transmit buffer           */
-  u32 out_off;                          /* Response buffer offset             */
+
+  u8 in_off;                           /* Query buffer offset                */
+  u8 out_off;                          /* Response buffer offset             */
 
 };
 

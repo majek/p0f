@@ -1041,7 +1041,7 @@ static void abort_handler(int sig) {
 static void epoll_event_loop(void){
 	struct api_client* ctable;
 	
-	int slots = 6 + api_max_conn;
+	int slots = 6 + api_max_conn;//Start with 128 slots
 	ctable = ck_alloc(slots * sizeof(struct api_client));
 
 
@@ -1168,28 +1168,37 @@ static void epoll_event_loop(void){
 					/* Query in place? Compute response and prepare to send it back. */
 
 					if (ctable[fd].in_off == sizeof(struct p0f_api_query)) {
-						handle_query(&ctable[fd].in_data, &ctable[fd].out_data);
+						ev.events = EPOLLOUT | EPOLLERR | EPOLLHUP;
+						ev.data.fd = fd;
+						res = epoll_ctl(epfd, EPOLL_CTL_MOD, fd, &ev);
+					}
+				}
+				else if (events[n].events & EPOLLOUT){
+					if (ctable[fd]->in_off < sizeof(struct p0f_api_query)){
+						WARN("Inconsistent p0f_api_response state.\n");
+					}
 
-						//Reset in offset
-						ctable[fd].in_off = 0;
+					i = write(pfds[fd].fd,
+						((char*)&ctable[cur]->out_data) + ctable[fd]->out_off,
+						sizeof(struct p0f_api_response) - ctable[fd]->out_off);
 
-						//A unix socket shouldnt block here, unless we arent reading fast enough
-						//Lets assume we have reasonably good clients and that this is a non issue
-						//This reduces complexity and improves performance, providing it holds true
-						/* Write API response, restart state when complete. */
+					if (i <= 0) {
+						PWARN("write() on API socket fails despite POLLOUT.");
+						close(pfds[fd].fd);
+						ctable[fd]->fd = -1;
+						continue;
+					}
 
-						//Disable non block for a minute
-						if (fcntl(fd, F_SETFL, 0))
-							PFATAL("fcntl() to set ~O_NONBLOCK on API connection fails.");
+					ctable[cur]->out_off += i;
 
-						res = write(fd,
-							((char*)&ctable[fd].out_data),
-							sizeof(struct p0f_api_response));
+					/* All done? Back to square zero then! */
 
-						if (fcntl(fd, F_SETFL, O_NONBLOCK))
-							PWARN("fcntl() to set O_NONBLOCK on API connection fails.");
-
-						if (res <= 0) PWARN("write() on API socket fails despite POLLOUT.");
+					if (ctable[cur]->out_off == sizeof(struct p0f_api_response)) {
+						ctable[cur]->in_off = ctable[cur]->out_off = 0;
+						
+						ev.events = EPOLLIN | EPOLLERR | EPOLLHUP;
+						ev.data.fd = fd;
+						res = epoll_ctl(epfd, EPOLL_CTL_MOD, fd, &ev);
 					}
 				}
 			}
@@ -1315,14 +1324,20 @@ static void poll_event_loop(void){
 
 				/* Write API response, restart state when complete. */
 
-				if (ctable[cur]->in_off < sizeof(struct p0f_api_query))
-					FATAL("Inconsistent p0f_api_response state.\n");
+				if (ctable[cur]->in_off < sizeof(struct p0f_api_query)){
+					WARN("Inconsistent p0f_api_response state.\n");
+				}
 
 				i = write(pfds[cur].fd,
 					((char*)&ctable[cur]->out_data) + ctable[cur]->out_off,
 					sizeof(struct p0f_api_response) - ctable[cur]->out_off);
 
-				if (i <= 0) PFATAL("write() on API socket fails despite POLLOUT.");
+				if (i <= 0) {
+					PWARN("write() on API socket fails despite POLLOUT.");
+					close(pfds[cur].fd);
+					ctable[cur]->fd = -1;
+					continue;
+				}
 
 				ctable[cur]->out_off += i;
 
