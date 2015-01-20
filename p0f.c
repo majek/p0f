@@ -1060,6 +1060,9 @@ static void epoll_event_loop(void){
 	//Initial epoll setup
 	int epfd = epoll_create(api_max_conn);
 
+	//Zero epoll event
+	memset(&ev, 0, sizeof ev);
+
 	//add PCAP fd
 	ev.events = EPOLLIN | EPOLLERR | EPOLLHUP;
 	ev.data.fd = pcap_fd;
