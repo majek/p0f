@@ -1127,12 +1127,12 @@ static void epoll_event_loop(void){
 							ctable = ck_realloc(ctable, slots * sizeof(struct api_client));
 						}
 
+						memset(&ctable[fd], 0, sizeof(struct api_client));
+
 						ctable[fd].fd = client_sock;
 
 						if (fcntl(client_sock, F_SETFL, O_NONBLOCK))
 							PFATAL("fcntl() to set O_NONBLOCK on API connection fails.");
-
-						ctable[fd].in_off = 0;
 
 						ev.events = EPOLLIN | EPOLLERR | EPOLLHUP;
 						ev.data.fd = client_sock;
