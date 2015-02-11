@@ -1188,9 +1188,9 @@ static void epoll_event_loop(void){
 					if (res <= 0) {
 						if (errno != EPIPE){
 							PWARN("write() on API socket fails despite POLLOUT.");
-							close(fd);
-							ctable[fd].fd = -1;
 						}
+						close(fd);
+						ctable[fd].fd = -1;
 					}
 					else{
 
