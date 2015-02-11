@@ -1186,22 +1186,25 @@ static void epoll_event_loop(void){
 						sizeof(struct p0f_api_response) - ctable[fd].out_off);
 
 					if (res <= 0) {
-						PWARN("write() on API socket fails despite POLLOUT.");
-						close(fd);
-						ctable[fd].fd = -1;
-						continue;
+						if (errno != EPIPE){
+							PWARN("write() on API socket fails despite POLLOUT.");
+							close(fd);
+							ctable[fd].fd = -1;
+						}
 					}
+					else{
 
-					ctable[fd].out_off += res;
+						ctable[fd].out_off += res;
 
-					/* All done? Back to square zero then! */
+						/* All done? Back to square zero then! */
 
-					if (ctable[fd].out_off == sizeof(struct p0f_api_response)) {
-						ctable[fd].in_off = ctable[fd].out_off = 0;
-						
-						ev.events = EPOLLIN | EPOLLERR | EPOLLHUP;
-						ev.data.fd = fd;
-						res = epoll_ctl(epfd, EPOLL_CTL_MOD, fd, &ev);
+						if (ctable[fd].out_off == sizeof(struct p0f_api_response)) {
+							ctable[fd].in_off = ctable[fd].out_off = 0;
+
+							ev.events = EPOLLIN | EPOLLERR | EPOLLHUP;
+							ev.data.fd = fd;
+							res = epoll_ctl(epfd, EPOLL_CTL_MOD, fd, &ev);
+						}
 					}
 				}
 			}
