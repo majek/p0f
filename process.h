@@ -11,7 +11,14 @@
 #ifndef _HAVE_PROCESS_H
 #define _HAVE_PROCESS_H
 
+#include "config.h"
+#ifdef USE_LIBPCAP
 #include <pcap.h>
+#elif defined(USE_LIBMNL)
+#include <libmnl/libmnl.h>
+#include <linux/netfilter/nfnetlink.h>
+#include <linux/netfilter/nfnetlink_log.h>
+#endif
 
 #include "types.h"
 #include "fp_tcp.h"
@@ -204,7 +211,11 @@ struct packet_flow {
 
 extern u64 packet_cnt;
 
+#ifdef USE_LIBPCAP
 void parse_packet(void* junk, const struct pcap_pkthdr* hdr, const u8* data);
+#elif defined(USE_LIBMNL)
+int parse_packet(const struct nlmsghdr *nlh, void *data);
+#endif
 
 u8* addr_to_str(u8* data, u8 ip_ver);
 

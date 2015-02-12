@@ -39,7 +39,7 @@ information about the actors they are talking to.
 
 Common uses for p0f include reconnaissance during penetration tests; routine
 network monitoring; detection of unauthorized network interconnects in corporate
-environments; providing signals for abuse-prevention tools; and miscellanous
+environments; providing signals for abuse-prevention tools; and miscellaneous
 forensics.
 
 A snippet of typical p0f output may look like this:
@@ -84,8 +84,26 @@ A live demonstration can be seen here:
 
 http://lcamtuf.coredump.cx/p0f3/
 
+------------------------------
+2. What does this fork change?
+------------------------------
+
+ - Inclusion of SSL fingerprint support from majek/p0f
+ - Support for nflog capturing (capture after IPTables)
+ - One sided stream support (SYN+ACK not required)
+ - Capture buffer size increased to fix crash on heavily loaded systems.
+ - epoll support for increased performance and scalability (increased API connections)
+ - optional support for using libmnl instead of libpcap (tiny cpu usage, no ENOBUFS issues)
+ 
+ This forks releases are possibly production ready, a version of it is in use at http://www.x4b.net/
+ 
+ Software is provided 'as-is'. No warranty is implied, we are not responsible for any
+ damages or loss resulting your use of this software.
+ 
+ Contributions (via pull requests) welcome.
+
 --------------------
-2. How does it work?
+3. How does it work?
 --------------------
 
 A vast majority of metrics used by p0f were invented specifically for this tool,
@@ -113,7 +131,7 @@ just plain trickery. For example, a system where TCP timestamps jump back
 and forth, or where TTLs and MTUs change subtly, is probably a NAT device.
 
 -------------------------------
-3. How do I compile and use it?
+4. How do I compile and use it?
 -------------------------------
 
 To compile p0f, try running './build.sh'; if that fails, you will be probably
@@ -125,7 +143,7 @@ verbose packet parsing and signature matching information will be written to
 stderr. This is useful when troubleshooting problems, but that's about it.
 
 The tool should compile cleanly under any reasonably new version of Linux,
-FreeBSD, OpenBSD, MacOS X, and so forth. You can also builtdit on Windows using
+FreeBSD, OpenBSD, MacOS X, and so forth. You can also build it on Windows using
 cygwin and winpcap. I have not tested it on all possible varieties of un*x, but
 if there are issues, they should be fairly superficial.
 
@@ -181,6 +199,9 @@ command-line options:
 
                Only one instance of p0f can be listening on a particular socket
                at any given time. The mode is also incompatible with -r.
+			   
+   -b        - disables the compiling and filtering by BPF. This is required to 
+			   listen to a nflog:{X} interface 
 
   -d         - runs p0f in daemon mode: the program will fork into background
                and continue writing to the specified log file or API socket. It
@@ -286,8 +307,13 @@ that fails, try this URL:
 Filters work both for online capture (-i) and for previously collected data
 produced by any other tool (-r).
 
+It is also possible to listen to a NFLOG (LINKTYPE_NFLOG) interface. BPF can 
+not be used on this interface. To listen to nflog group 1:
+
+# ./p0f -i nflog:1 -b
+
 -------------
-4. API access
+5. API access
 -------------
 
 The API allows other applications running on the same system to get p0f's
@@ -391,7 +417,7 @@ Developers using the API should be aware of several important constraints:
     go back hours or days, parse the logs instead of wasting RAM.
 
 -----------------------
-5. Fingerprint database
+6. Fingerprint database
 -----------------------
 
 Whenever p0f obtains a fingerprint from the observed traffic, it defers to
@@ -780,7 +806,7 @@ bottom of the list.
    *** NOT IMPLEMENTED YET ***
 
 ----------------
-6. NAT detection
+7. NAT detection
 ----------------
 
 In addition to fairly straightforward measurements of intrinsic properties of
@@ -837,7 +863,7 @@ even to very homogenous environments behind NAT. If you end up seeing false
 positives or other detection problems in your environment, please let me know!
 
 -----------
-7. Security
+8. Security
 -----------
 
 You should treat the output from this tool as advisory; the fingerprinting can
@@ -889,7 +915,7 @@ able to compromise your system. The same goes for many other uses of sudo, by
 the way.
 
 --------------
-8. Limitations
+9. Limitations
 --------------
 
 Here are some of the known issues you may run into:
@@ -938,9 +964,9 @@ Here are some of the known issues you may run into:
    Windows raw sockets (this should be relatively easy to fix if there are any
    users who care).
 
----------------------------
-9. Acknowledgments and more
----------------------------
+----------------------------
+10. Acknowledgments and more
+----------------------------
 
 P0f is made possible thanks to the contributions of several good souls,
 including:
@@ -962,6 +988,8 @@ including:
   Anthony Howe
   Tomoyuki Murakami
   Marek Majkowski
+  Michael Petch
+  Mathew Heard
 
 If you wish to help, the most immediate way to do so is to simply gather new
 signatures, especially from less popular or older platforms (servers, networking

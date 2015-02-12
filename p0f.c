@@ -11,6 +11,7 @@
 #define _GNU_SOURCE
 #define _FROM_P0F
 
+#include "config.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -20,7 +21,6 @@
 #include <dirent.h>
 #include <pwd.h>
 #include <grp.h>
-#include <poll.h>
 #include <time.h>
 #include <locale.h>
 
@@ -34,6 +34,13 @@
 #include <sys/wait.h>
 #include <netinet/in.h>
 
+#ifdef USE_LIBPCAP
+//TODO: compile option for linux options
+#define NETLINK_NO_ENOBUFS	5
+
+#ifndef SOL_NETLINK
+#define SOL_NETLINK 270
+#endif
 #include <pcap.h>
 
 #ifdef NET_BPF
@@ -41,6 +48,16 @@
 #else
 #  include <pcap-bpf.h>
 #endif /* !NET_BPF */
+#elif defined(USE_LIBMNL)
+#include <arpa/inet.h>
+
+#include <libmnl/libmnl.h>
+#include <linux/netfilter.h>
+#include <linux/netfilter/nfnetlink.h>
+#include <linux/netfilter/nfnetlink_log.h>
+#else
+#error Neither LIBPCAP or LIBMNL selected
+#endif
 
 #include "types.h"
 #include "debug.h"
@@ -51,6 +68,12 @@
 #include "tcp.h"
 #include "fp_http.h"
 #include "p0f.h"
+
+#ifdef USE_EPOLL
+#include <sys/epoll.h>
+#else
+#include <poll.h>
+#endif
 
 #ifndef PF_INET6
 #  define PF_INET6          10
@@ -90,13 +113,23 @@ static FILE* lf;                        /* Log file stream                    */
 
 static u8 stop_soon;                    /* Ctrl-C or so pressed?              */
 
+u8 disable_bpf;                         /* Dont compile and assign BPF        */
+
 u8 daemon_mode;                         /* Running in daemon mode?            */
 
 static u8 set_promisc;                  /* Use promiscuous mode?              */
          
+#ifdef USE_LIBPCAP
 static pcap_t *pt;                      /* PCAP capture thingy                */
 
 s32 link_type;                          /* PCAP link type                     */
+
+#elif defined(USE_LIBMNL)
+
+struct mnl_socket* nl;              /* Netlink socket */
+unsigned int portid;
+
+#endif
 
 u32 hash_seed;                          /* Hash seed                          */
 
@@ -122,8 +155,10 @@ static void usage(void) {
 "Network interface options:\n"
 "\n"
 "  -i iface  - listen on the specified network interface\n"
+#ifdef USE_LIBPCAP
 "  -r file   - read offline pcap data from a given file\n"
 "  -p        - put the listening interface in promiscuous mode\n"
+#endif
 "  -L        - list all available interfaces\n"
 "\n"
 "Operating mode and output settings:\n"
@@ -134,12 +169,17 @@ static void usage(void) {
 "  -s name   - answer to API queries at a named unix socket\n"
 #endif /* !__CYGWIN__ */
 "  -u user   - switch to the specified unprivileged account and chroot\n"
+"  -b        - dont compile and filter by BPF\n"
 "  -d        - fork into background (requires -o or -s)\n"
 "\n"
 "Performance-related options:\n"
 "\n"
 #ifndef __CYGWIN__
+#ifdef USE_EPOLL
+"  -S limit  - default storage capacity for parallel API connections, not guarunteed (%u)\n"
+#else
 "  -S limit  - limit number of parallel API connections (%u)\n"
+#endif
 #endif /* !__CYGWIN__ */
 "  -t c,h    - set connection / host cache age limits (%us,%um)\n"
 "  -m c,h    - cap the number of active connections / hosts (%u,%u)\n"
@@ -371,6 +411,7 @@ void add_observation_field(char* key, u8* value) {
 }
 
 
+#ifdef USE_LIBPCAP
 /* Show PCAP interface list */
 
 static void list_interfaces(void) {
@@ -422,7 +463,6 @@ static void list_interfaces(void) {
 }
 
 
-
 #ifdef __CYGWIN__
 
 /* List PCAP-recognized interfaces */
@@ -450,6 +490,73 @@ static u8* find_interface(int num) {
 }
 
 #endif /* __CYGWIN__ */
+
+pcap_t *
+p0f_open_live(const char *source, int snaplen, int promisc, int to_ms, char *errbuf)
+{
+	pcap_t *p;
+	int status;
+
+	p = pcap_create(source, errbuf);
+	if (p == NULL)
+		return (NULL);
+	DEBUG("PCAP created successfully\n");
+
+	status = pcap_set_snaplen(p, snaplen);
+	if (status < 0)
+		goto fail;
+	DEBUG("PCAP snaplen set successfully\n");
+
+	status = pcap_set_promisc(p, promisc);
+	if (status < 0)
+		goto fail;
+	DEBUG("PCAP promisc set successfully\n");
+
+	status = pcap_set_timeout(p, to_ms);
+	if (status < 0)
+		goto fail;
+	DEBUG("PCAP timeout set successfully\n");
+
+	status = pcap_set_buffer_size(p, 20971520);
+	if (status < 0)
+		goto fail;
+	DEBUG("PCAP buffer set successfully\n");
+
+///	if (link_type == DLT_NFLOG){
+		status = setsockopt(pcap_fileno(p), SOL_NETLINK, NETLINK_NO_ENOBUFS, &(int){1}, sizeof(int));
+	///If fails, probably not nfnetlink
+	//	if (status < 0)
+	//		FATAL("setsockopt: %s", strerror(errno));
+	//	DEBUG("PCAP overflow condition set successfully");
+//	}
+
+	status = pcap_activate(p);
+	if (status < 0)
+		goto fail;
+	DEBUG("PCAP activated");
+
+	link_type = pcap_datalink(p);
+	DEBUG("PCAP data link type: %d\n", link_type);
+
+	return (p);
+fail:
+	if (status == PCAP_ERROR)
+		snprintf(errbuf, PCAP_ERRBUF_SIZE, "%s: %s", source,
+		pcap_geterr(p));
+	else if (status == PCAP_ERROR_NO_SUCH_DEVICE ||
+		status == PCAP_ERROR_PERM_DENIED
+#ifdef PCAP_ERROR_PROMISC_PERM_DENIED
+		|| status == PCAP_ERROR_PROMISC_PERM_DENIED
+#endif
+		)
+		snprintf(errbuf, PCAP_ERRBUF_SIZE, "%s: %s (%s)", source,
+		pcap_statustostr(status), pcap_geterr(p));
+	else
+		snprintf(errbuf, PCAP_ERRBUF_SIZE, "%s: %s", source,
+		pcap_statustostr(status));
+	pcap_close(p);
+	return (NULL);
+}
 
 
 /* Initialize PCAP capture */
@@ -481,7 +588,7 @@ static void prepare_pcap(void) {
     if (!use_iface) {
 
       /* See the earlier note on libpcap SEGV - same problem here.
-         Also, this retusns something stupid on Windows, but hey... */
+         Also, this returns something stupid on Windows, but hey... */
      
       if (!access("/sys/class/net", R_OK | X_OK) || errno == ENOENT)
         use_iface = (u8*)pcap_lookupdev(pcap_err);
@@ -506,14 +613,14 @@ static void prepare_pcap(void) {
   
     }
 
-    pt = pcap_open_live((char*)use_iface, SNAPLEN, set_promisc, 250, pcap_err);
+	pt = p0f_open_live((char*)use_iface, SNAPLEN, set_promisc, 250, pcap_err);
 
 #else 
 
     /* PCAP timeouts tend to be broken, so we'll use a minimum value
        and rely on select() instead. */
 
-    pt = pcap_open_live((char*)use_iface, SNAPLEN, set_promisc, 1, pcap_err);
+	pt = p0f_open_live((char*)use_iface, SNAPLEN, set_promisc, 1, pcap_err);
 
 #endif /* ^__CYGWIN__ */
 
@@ -525,9 +632,6 @@ static void prepare_pcap(void) {
     if (!pt) FATAL("pcap_open_live: %s", pcap_err);
 
   }
-
-  link_type = pcap_datalink(pt);
-
 }
 
 
@@ -616,7 +720,210 @@ retry_no_vlan:
   }
 
 }
+#elif defined(USE_LIBMNL)
 
+#ifdef NL_MMAP_STATUS_UNUSED //Has mmap support
+static struct nlmsghdr *nflog_build_cfg_pf_request(struct mnl_socket *nl, uint8_t command)
+{
+	struct nl_mmap_hdr *hdr;
+
+	hdr = mnl_socket_get_frame(nl, MNL_RING_TX);
+	if (hdr->nm_status != NL_MMAP_STATUS_UNUSED)
+		return NULL;
+	mnl_socket_advance_ring(nl, MNL_RING_TX);
+
+	struct nlmsghdr *nlh = mnl_nlmsg_put_header((void *)hdr + NL_MMAP_HDRLEN);
+	nlh->nlmsg_type = (NFNL_SUBSYS_ULOG << 8) | NFULNL_MSG_CONFIG;
+	nlh->nlmsg_flags = NLM_F_REQUEST;
+
+	struct nfgenmsg *nfg = mnl_nlmsg_put_extra_header(nlh, sizeof(*nfg));
+	nfg->nfgen_family = AF_INET;
+	nfg->version = NFNETLINK_V0;
+
+	struct nfulnl_msg_config_cmd cmd = {
+		.command = command,
+	};
+	mnl_attr_put(nlh, NFULA_CFG_CMD, sizeof(cmd), &cmd);
+
+	hdr->nm_len = nlh->nlmsg_len;
+	hdr->nm_status = NL_MMAP_STATUS_VALID;
+	return nlh;
+}
+
+static struct nlmsghdr *nflog_build_cfg_request(struct mnl_socket *nl, uint8_t command, int nflognum)
+{
+	struct nl_mmap_hdr *hdr;
+
+	hdr = mnl_socket_get_frame(nl, MNL_RING_TX);
+	if (hdr->nm_status != NL_MMAP_STATUS_UNUSED)
+		return NULL;
+	mnl_socket_advance_ring(nl, MNL_RING_TX);
+
+	struct nlmsghdr *nlh = mnl_nlmsg_put_header((void *)hdr + NL_MMAP_HDRLEN);
+	nlh->nlmsg_type = (NFNL_SUBSYS_ULOG << 8) | NFULNL_MSG_CONFIG;
+	nlh->nlmsg_flags = NLM_F_REQUEST;
+
+	struct nfgenmsg *nfg = mnl_nlmsg_put_extra_header(nlh, sizeof(*nfg));
+	nfg->nfgen_family = AF_INET;
+	nfg->version = NFNETLINK_V0;
+	nfg->res_id = htons(nflognum);
+
+	struct nfulnl_msg_config_cmd cmd = {
+		.command = command,
+	};
+	mnl_attr_put(nlh, NFULA_CFG_CMD, sizeof(cmd), &cmd);
+
+	hdr->nm_len = nlh->nlmsg_len;
+	hdr->nm_status = NL_MMAP_STATUS_VALID;
+	return nlh;
+}
+
+static struct nlmsghdr *nflog_build_cfg_params(struct mnl_socket *nl, uint8_t mode, int range, int nflognum)
+{
+	struct nl_mmap_hdr *hdr;
+
+	hdr = mnl_socket_get_frame(nl, MNL_RING_TX);
+	if (hdr->nm_status != NL_MMAP_STATUS_UNUSED)
+		return NULL;
+	mnl_socket_advance_ring(nl, MNL_RING_TX);
+
+	struct nlmsghdr *nlh = mnl_nlmsg_put_header((void *)hdr + NL_MMAP_HDRLEN);
+	nlh->nlmsg_type = (NFNL_SUBSYS_ULOG << 8) | NFULNL_MSG_CONFIG;
+	nlh->nlmsg_flags = NLM_F_REQUEST;
+
+	struct nfgenmsg *nfg = mnl_nlmsg_put_extra_header(nlh, sizeof(*nfg));
+	nfg->nfgen_family = AF_UNSPEC;
+	nfg->version = NFNETLINK_V0;
+	nfg->res_id = htons(nflognum);
+
+	struct nfulnl_msg_config_mode params = {
+		.copy_range = htonl(range),
+		.copy_mode = mode,
+	};
+	mnl_attr_put(nlh, NFULA_CFG_MODE, sizeof(params), &params);
+
+	hdr->nm_len = nlh->nlmsg_len;
+	hdr->nm_status = NL_MMAP_STATUS_VALID;
+	return nlh;
+}
+#else
+static struct nlmsghdr *
+nflog_build_cfg_pf_request(char *buf, uint8_t command)
+{
+	struct nlmsghdr *nlh = mnl_nlmsg_put_header(buf);
+	nlh->nlmsg_type = (NFNL_SUBSYS_ULOG << 8) | NFULNL_MSG_CONFIG;
+	nlh->nlmsg_flags = NLM_F_REQUEST;
+
+	struct nfgenmsg *nfg = mnl_nlmsg_put_extra_header(nlh, sizeof(*nfg));
+	nfg->nfgen_family = AF_INET;
+	nfg->version = NFNETLINK_V0;
+
+	struct nfulnl_msg_config_cmd cmd = {
+		.command = command,
+	};
+	mnl_attr_put(nlh, NFULA_CFG_CMD, sizeof(cmd), &cmd);
+
+	return nlh;
+}
+
+static struct nlmsghdr *
+nflog_build_cfg_request(char *buf, uint8_t command, int qnum)
+{
+	struct nlmsghdr *nlh = mnl_nlmsg_put_header(buf);
+	nlh->nlmsg_type = (NFNL_SUBSYS_ULOG << 8) | NFULNL_MSG_CONFIG;
+	nlh->nlmsg_flags = NLM_F_REQUEST;
+
+	struct nfgenmsg *nfg = mnl_nlmsg_put_extra_header(nlh, sizeof(*nfg));
+	nfg->nfgen_family = AF_INET;
+	nfg->version = NFNETLINK_V0;
+	nfg->res_id = htons(qnum);
+
+	struct nfulnl_msg_config_cmd cmd = {
+		.command = command,
+	};
+	mnl_attr_put(nlh, NFULA_CFG_CMD, sizeof(cmd), &cmd);
+
+	return nlh;
+}
+
+static struct nlmsghdr *
+nflog_build_cfg_params(char *buf, uint8_t mode, int range, int qnum)
+{
+	struct nlmsghdr *nlh = mnl_nlmsg_put_header(buf);
+	nlh->nlmsg_type = (NFNL_SUBSYS_ULOG << 8) | NFULNL_MSG_CONFIG;
+	nlh->nlmsg_flags = NLM_F_REQUEST;
+
+	struct nfgenmsg *nfg = mnl_nlmsg_put_extra_header(nlh, sizeof(*nfg));
+	nfg->nfgen_family = AF_UNSPEC;
+	nfg->version = NFNETLINK_V0;
+	nfg->res_id = htons(qnum);
+
+	struct nfulnl_msg_config_mode params = {
+		.copy_range = htonl(range),
+		.copy_mode = mode,
+	};
+	mnl_attr_put(nlh, NFULA_CFG_MODE, sizeof(params), &params);
+
+	return nlh;
+}
+#endif
+
+static void prepare_netlink(void){
+	char buf[MNL_SOCKET_BUFFER_SIZE];
+	struct nlmsghdr *nlh;
+	unsigned int qnum;
+
+	//Get queue
+	qnum = atoi((const char*)use_iface);
+
+	//open netfilter socket
+	nl = mnl_socket_open(NETLINK_NETFILTER);
+	if (nl == NULL) {
+		PFATAL("mnl_socket_open");
+	}
+
+	//setup
+	if (mnl_socket_bind(nl, 0, MNL_SOCKET_AUTOPID) < 0) {
+		PFATAL("mnl_socket_bind");
+	}
+	portid = mnl_socket_get_portid(nl);
+
+	nlh = nflog_build_cfg_pf_request(buf, NFULNL_CFG_CMD_PF_UNBIND);
+
+	if (mnl_socket_sendto(nl, nlh, nlh->nlmsg_len) < 0) {
+		PFATAL("mnl_socket_sendto");
+	}
+
+	nlh = nflog_build_cfg_pf_request(buf, NFULNL_CFG_CMD_PF_BIND);
+
+	if (mnl_socket_sendto(nl, nlh, nlh->nlmsg_len) < 0) {
+		PFATAL("mnl_socket_sendto");
+	}
+
+	///If fails, probably not nfnetlink
+	if (mnl_socket_setsockopt(nl, NETLINK_NO_ENOBUFS, &(int){1}, sizeof(int)) < 0){
+		FATAL("setsockopt: %s", strerror(errno));
+	//	DEBUG("PCAP overflow condition set successfully");
+	}
+
+	int a = 655350;
+	if (setsockopt(mnl_socket_get_fd(nl), SOL_SOCKET, SO_RCVBUF, &a, sizeof(int)) < 0) {
+		FATAL("Error setting socket opts: %s\n", strerror(errno));
+	}
+
+	nlh = nflog_build_cfg_request(buf, NFULNL_CFG_CMD_BIND, qnum);
+
+	if (mnl_socket_sendto(nl, nlh, nlh->nlmsg_len) < 0) {
+		PFATAL("mnl_socket_sendto");
+	}
+
+	nlh = nflog_build_cfg_params(buf, NFULNL_COPY_PACKET, 0xFFFF, qnum);
+
+	if (mnl_socket_sendto(nl, nlh, nlh->nlmsg_len) < 0) {
+		PFATAL("mnl_socket_sendto");
+	}
+}
+#endif
 
 /* Drop privileges and chroot(), with some sanity checks */
 
@@ -721,6 +1028,7 @@ static void fork_off(void) {
 /* Handler for Ctrl-C and related signals */
 
 static void abort_handler(int sig) {
+	SAYF("Received signal: %d\n", sig);
   if (stop_soon) exit(1);
   stop_soon = 1;
 }
@@ -728,6 +1036,189 @@ static void abort_handler(int sig) {
 
 #ifndef __CYGWIN__
 
+#ifdef USE_EPOLL
+
+static void epoll_event_loop(void){
+	struct api_client* ctable;
+	
+	int slots = 6 + api_max_conn;//Start with 128 slots
+	ctable = ck_alloc(slots * sizeof(struct api_client));
+
+
+	struct epoll_event ev;
+	struct epoll_event events[5];
+#ifdef USE_LIBPCAP
+	int pcap_fd = pcap_fileno(pt);
+#elif defined(USE_LIBMNL)
+	int pcap_fd = mnl_socket_get_fd(nl);
+	char buf[MNL_SOCKET_BUFFER_SIZE];
+#endif
+	int res;
+
+	DEBUG("[#] pcap fd: %d\n", pcap_fd);
+
+	//Initial epoll setup
+	int epfd = epoll_create(api_max_conn);
+
+	//Zero epoll event
+	memset(&ev, 0, sizeof ev);
+
+	//add PCAP fd
+	ev.events = EPOLLIN | EPOLLERR | EPOLLHUP;
+	ev.data.fd = pcap_fd;
+	res = epoll_ctl(epfd, EPOLL_CTL_ADD, pcap_fd, &ev);
+	if (res != 0){
+		PFATAL("epoll_ctl() failed.");
+	}
+
+	if (api_sock){
+		//add api fd
+		ev.events = EPOLLIN | EPOLLERR | EPOLLHUP;
+		ev.data.fd = api_fd;
+		res = epoll_ctl(epfd, EPOLL_CTL_ADD, api_fd, &ev);
+		if (res != 0){
+			PFATAL("epoll_ctl() failed.");
+		}
+	}
+
+	if (!daemon_mode)
+		SAYF("[+] Entered main event loop.\n\n");
+
+	//Main loop
+	while (!stop_soon) {
+		int nfds = epoll_wait(epfd, events, 5, -1);
+		int n = 0;
+		while ( n < nfds ) {
+			int fd = events[n].data.fd;
+			if (fd == pcap_fd){
+				//Handle PCAP event
+				if (events[n].events & EPOLLIN){
+#ifdef USE_LIBPCAP
+					if (pcap_dispatch(pt, -1, (pcap_handler)parse_packet, 0) < 0)
+						FATAL("Packet capture interface is down.");
+#elif defined(USE_LIBMNL)
+					res = mnl_socket_recvfrom(nl, buf, sizeof(buf));
+					if (res == -1) {
+						PFATAL("mnl_socket_recvfrom");
+					}
+					res = mnl_cb_run(buf, res, 0, portid, parse_packet, NULL);
+					if (res < 0){
+						PFATAL("mnl_cb_run");
+					}
+#endif
+
+				}
+				else if(events[n].events & EPOLLERR || events[n].events & EPOLLHUP){
+					FATAL("Packet capture interface is down.");
+				}
+			}
+			else if (fd == api_fd) {
+				//Accept api connection
+				if (events[n].events & EPOLLIN){
+					int client_sock = accept(api_fd, NULL, NULL);
+
+					if (client_sock < 0) {
+						WARN("Unable to handle API connection: accept() fails.");
+					}
+					else {
+						if (client_sock >= slots){
+							WARN("Too many connections, enlarging connection table");
+							slots *= 2;
+							ctable = ck_realloc(ctable, slots * sizeof(struct api_client));
+						}
+
+						memset(&ctable[fd], 0, sizeof(struct api_client));
+
+						ctable[fd].fd = client_sock;
+
+						if (fcntl(client_sock, F_SETFL, O_NONBLOCK))
+							PFATAL("fcntl() to set O_NONBLOCK on API connection fails.");
+
+						ev.events = EPOLLIN | EPOLLERR | EPOLLHUP;
+						ev.data.fd = client_sock;
+						res = epoll_ctl(epfd, EPOLL_CTL_ADD, client_sock, &ev);
+						if (res != 0){
+							PFATAL("epoll_ctl() failed.");
+						}
+					}
+				}
+				else if (events[n].events & EPOLLERR || events[n].events & EPOLLHUP){
+					FATAL("API socket is down.");
+				}
+			}
+			else{
+				//Handle API query
+				if (events[n].events & EPOLLERR || events[n].events & EPOLLHUP){
+					DEBUG("[#] API connection on fd %d closed.\n", events[n].data.fd);
+
+					close(fd);
+					ctable[fd].fd = -1;
+				}
+				else if (events[n].events & EPOLLIN){
+					/* Receive API query, dispatch when complete. */
+
+					if (ctable[fd].in_off >= sizeof(struct p0f_api_query))
+						FATAL("Inconsistent p0f_api_query state.\n");
+
+					res = read(fd,
+						((char*)&ctable[fd].in_data) + ctable[fd].in_off,
+						sizeof(struct p0f_api_query) - ctable[fd].in_off);
+
+					if (res < 0) PFATAL("read() on API socket fails despite POLLIN.");
+
+					ctable[fd].in_off += res;
+
+					/* Query in place? Compute response and prepare to send it back. */
+
+					if (ctable[fd].in_off == sizeof(struct p0f_api_query)) {
+						ev.events = EPOLLOUT | EPOLLERR | EPOLLHUP;
+						ev.data.fd = fd;
+						ctable[fd].in_off = 0;
+						res = epoll_ctl(epfd, EPOLL_CTL_MOD, fd, &ev);
+					}
+				}
+				else if (events[n].events & EPOLLOUT){
+					if (ctable[fd].in_off < sizeof(struct p0f_api_query)){
+						WARN("Inconsistent p0f_api_response state.\n");
+					}
+
+					res = write(fd,
+						((char*)&ctable[fd].out_data) + ctable[fd].out_off,
+						sizeof(struct p0f_api_response) - ctable[fd].out_off);
+
+					if (res <= 0) {
+						if (errno != EPIPE){
+							PWARN("write() on API socket fails despite POLLOUT.");
+						}
+						close(fd);
+						ctable[fd].fd = -1;
+					}
+					else{
+
+						ctable[fd].out_off += res;
+
+						/* All done? Back to square zero then! */
+
+						if (ctable[fd].out_off == sizeof(struct p0f_api_response)) {
+							ctable[fd].out_off = 0;
+
+							ev.events = EPOLLIN | EPOLLERR | EPOLLHUP;
+							ev.data.fd = fd;
+							res = epoll_ctl(epfd, EPOLL_CTL_MOD, fd, &ev);
+						}
+					}
+				}
+			}
+
+			//Increment n (like a for loop!)
+			++n;
+		}
+	}
+
+	close(epfd);
+	ck_free(ctable);
+}
+#else
 /* Regenerate pollfd data for poll() */
 
 static u32 regen_pfds(struct pollfd* pfds, struct api_client** ctable) {
@@ -765,8 +1256,199 @@ static u32 regen_pfds(struct pollfd* pfds, struct api_client** ctable) {
 
 }
 
-#endif /* !__CYGWIN__ */
+static void poll_event_loop(void){
+	struct pollfd *pfds;
+	struct api_client** ctable;
+	u32 pfd_count;
 
+	/* We need room for pcap, and possibly api_fd + api_clients. */
+
+	pfds = ck_alloc((1 + (api_sock ? (1 + api_max_conn) : 0)) *
+		sizeof(struct pollfd));
+
+	ctable = ck_alloc((1 + (api_sock ? (1 + api_max_conn) : 0)) *
+		sizeof(struct api_client*));
+
+	pfd_count = regen_pfds(pfds, ctable);
+
+	if (!daemon_mode)
+		SAYF("[+] Entered main event loop.\n\n");
+
+	while (!stop_soon) {
+
+		s32 pret, i;
+		u32 cur;
+
+		/* We use a 250 ms timeout to keep Ctrl-C responsive without resorting to
+		silly sigaction hackery or unsafe signal handler code. */
+
+	poll_again:
+
+		pret = poll(pfds, pfd_count, 250);
+
+		if (pret < 0) {
+			if (errno == EINTR) break;
+			PFATAL("poll() failed.");
+		}
+
+		if (!pret) { if (log_file) fflush(lf); continue; }
+
+		/* Examine pfds... */
+
+		for (cur = 0; cur < pfd_count; cur++) {
+
+			if (pfds[cur].revents & (POLLERR | POLLHUP)) switch (cur) {
+
+			case 0:
+
+				FATAL("Packet capture interface is down.");
+
+			case 1:
+
+				FATAL("API socket is down.");
+
+			default:
+
+				/* Shut down API connection and free its state. */
+
+				DEBUG("[#] API connection on fd %d closed.\n", pfds[cur].fd);
+
+				close(pfds[cur].fd);
+				ctable[cur]->fd = -1;
+
+				pfd_count = regen_pfds(pfds, ctable);
+				goto poll_again;
+
+			}
+
+			if (pfds[cur].revents & POLLOUT) switch (cur) {
+
+			case 0: case 1:
+
+				FATAL("Unexpected POLLOUT on fd %d.\n", cur);
+
+			default:
+
+				/* Write API response, restart state when complete. */
+
+				if (ctable[cur]->in_off < sizeof(struct p0f_api_query)){
+					WARN("Inconsistent p0f_api_response state.\n");
+				}
+
+				i = write(pfds[cur].fd,
+					((char*)&ctable[cur]->out_data) + ctable[cur]->out_off,
+					sizeof(struct p0f_api_response) - ctable[cur]->out_off);
+
+				if (i <= 0) {
+					PWARN("write() on API socket fails despite POLLOUT.");
+					close(pfds[cur].fd);
+					ctable[cur]->fd = -1;
+					continue;
+				}
+
+				ctable[cur]->out_off += i;
+
+				/* All done? Back to square zero then! */
+
+				if (ctable[cur]->out_off == sizeof(struct p0f_api_response)) {
+
+					ctable[cur]->in_off = ctable[cur]->out_off = 0;
+					pfds[cur].events = (POLLIN | POLLERR | POLLHUP);
+
+				}
+
+			}
+
+			if (pfds[cur].revents & POLLIN) switch (cur) {
+
+			case 0:
+
+				/* Process traffic on the capture interface. */
+
+				if (pcap_dispatch(pt, -1, (pcap_handler)parse_packet, 0) < 0)
+					FATAL("Packet capture interface is down.");
+
+				break;
+
+			case 1:
+
+				/* Accept new API connection, limits permitting. */
+
+				if (!api_sock) FATAL("Unexpected API connection.");
+
+				if (pfd_count - 2 < api_max_conn) {
+
+					for (i = 0; i < api_max_conn && api_cl[i].fd >= 0; i++);
+
+					if (i == api_max_conn) FATAL("Inconsistent API connection data.");
+
+					api_cl[i].fd = accept(api_fd, NULL, NULL);
+
+					if (api_cl[i].fd < 0) {
+
+						WARN("Unable to handle API connection: accept() fails.");
+
+					}
+					else {
+
+						if (fcntl(api_cl[i].fd, F_SETFL, O_NONBLOCK))
+							PFATAL("fcntl() to set O_NONBLOCK on API connection fails.");
+
+						api_cl[i].in_off = api_cl[i].out_off = 0;
+						pfd_count = regen_pfds(pfds, ctable);
+
+						DEBUG("[#] Accepted new API connection, fd %d.\n", api_cl[i].fd);
+
+						goto poll_again;
+
+					}
+
+				}
+				else WARN("Too many API connections (use -S to adjust).\n");
+
+				break;
+
+			default:
+
+				/* Receive API query, dispatch when complete. */
+
+				if (ctable[cur]->in_off >= sizeof(struct p0f_api_query))
+					FATAL("Inconsistent p0f_api_query state.\n");
+
+				i = read(pfds[cur].fd,
+					((char*)&ctable[cur]->in_data) + ctable[cur]->in_off,
+					sizeof(struct p0f_api_query) - ctable[cur]->in_off);
+
+				if (i < 0) PFATAL("read() on API socket fails despite POLLIN.");
+
+				ctable[cur]->in_off += i;
+
+				/* Query in place? Compute response and prepare to send it back. */
+
+				if (ctable[cur]->in_off == sizeof(struct p0f_api_query)) {
+
+					handle_query(&ctable[cur]->in_data, &ctable[cur]->out_data);
+					pfds[cur].events = (POLLOUT | POLLERR | POLLHUP);
+
+				}
+
+			}
+
+
+			/* Processed all reported updates already? If so, bail out early. */
+
+			if (pfds[cur].revents && !--pret) break;
+
+		}
+
+	}
+
+	ck_free(ctable);
+	ck_free(pfds);
+}
+#endif
+
+#endif /* !__CYGWIN__ */
 
 /* Event loop! Accepts and dispatches pcap data, API queries, etc. */
 
@@ -783,185 +1465,11 @@ static void live_event_loop(void) {
      nasty busy loop, or a ton of Windows-specific code. If you need APi
      queries on Windows, you are welcome to fix this :-) */
 
-  struct pollfd *pfds;
-  struct api_client** ctable;
-  u32 pfd_count;
-
-  /* We need room for pcap, and possibly api_fd + api_clients. */
-
-  pfds = ck_alloc((1 + (api_sock ? (1 + api_max_conn) : 0)) *
-                  sizeof(struct pollfd));
-
-  ctable = ck_alloc((1 + (api_sock ? (1 + api_max_conn) : 0)) *
-                    sizeof(struct api_client*));
-
-  pfd_count = regen_pfds(pfds, ctable);
-
-  if (!daemon_mode) 
-    SAYF("[+] Entered main event loop.\n\n");
-
-  while (!stop_soon) {
-
-    s32 pret, i;
-    u32 cur;
-
-    /* We use a 250 ms timeout to keep Ctrl-C responsive without resortng to
-       silly sigaction hackery or unsafe signal handler code. */
-
-poll_again:
-
-    pret = poll(pfds, pfd_count, 250);
-
-    if (pret < 0) {
-      if (errno == EINTR) break;
-      PFATAL("poll() failed.");
-    }
-
-    if (!pret) { if (log_file) fflush(lf); continue; }
-
-    /* Examine pfds... */
-
-    for (cur = 0; cur < pfd_count; cur++) {
-
-      if (pfds[cur].revents & POLLOUT) switch (cur) {
-
-        case 0: case 1:
-
-          FATAL("Unexpected POLLOUT on fd %d.\n", cur);
-
-        default:
-
-          /* Write API response, restart state when complete. */
-
-          if (ctable[cur]->in_off < sizeof(struct p0f_api_query))
-            FATAL("Inconsistent p0f_api_response state.\n");
-
-          i = write(pfds[cur].fd, 
-                   ((char*)&ctable[cur]->out_data) + ctable[cur]->out_off,
-                   sizeof(struct p0f_api_response) - ctable[cur]->out_off);
-
-          if (i <= 0) PFATAL("write() on API socket fails despite POLLOUT.");
-
-          ctable[cur]->out_off += i;
-
-          /* All done? Back to square zero then! */
-
-          if (ctable[cur]->out_off == sizeof(struct p0f_api_response)) {
-
-             ctable[cur]->in_off = ctable[cur]->out_off = 0;
-             pfds[cur].events   = (POLLIN | POLLERR | POLLHUP);
-
-          }
-
-      }
-
-      if (pfds[cur].revents & POLLIN) switch (cur) {
- 
-        case 0:
-
-          /* Process traffic on the capture interface. */
-
-          if (pcap_dispatch(pt, -1, (pcap_handler)parse_packet, 0) < 0)
-            FATAL("Packet capture interface is down.");
-
-          break;
-
-        case 1:
-
-          /* Accept new API connection, limits permitting. */
-
-          if (!api_sock) FATAL("Unexpected API connection.");
-
-          if (pfd_count - 2 < api_max_conn) {
-
-            for (i = 0; i < api_max_conn && api_cl[i].fd >= 0; i++);
-
-            if (i == api_max_conn) FATAL("Inconsistent API connection data.");
-
-            api_cl[i].fd = accept(api_fd, NULL, NULL);
-
-            if (api_cl[i].fd < 0) {
-
-              WARN("Unable to handle API connection: accept() fails.");
-
-            } else {
-
-              if (fcntl(api_cl[i].fd, F_SETFL, O_NONBLOCK))
-                PFATAL("fcntl() to set O_NONBLOCK on API connection fails.");
-
-              api_cl[i].in_off = api_cl[i].out_off = 0;
-              pfd_count = regen_pfds(pfds, ctable);
-
-              DEBUG("[#] Accepted new API connection, fd %d.\n", api_cl[i].fd);
-
-              goto poll_again;
-
-            }
-
-          } else WARN("Too many API connections (use -S to adjust).\n");
-
-          break;
-
-        default:
-
-          /* Receive API query, dispatch when complete. */
-
-          if (ctable[cur]->in_off >= sizeof(struct p0f_api_query))
-            FATAL("Inconsistent p0f_api_query state.\n");
-
-          i = read(pfds[cur].fd, 
-                   ((char*)&ctable[cur]->in_data) + ctable[cur]->in_off,
-                   sizeof(struct p0f_api_query) - ctable[cur]->in_off);
-
-          if (i < 0) PFATAL("read() on API socket fails despite POLLIN.");
-
-          ctable[cur]->in_off += i;
-
-          /* Query in place? Compute response and prepare to send it back. */
-
-          if (ctable[cur]->in_off == sizeof(struct p0f_api_query)) {
-
-            handle_query(&ctable[cur]->in_data, &ctable[cur]->out_data);
-            pfds[cur].events = (POLLOUT | POLLERR | POLLHUP);
-
-          }
-
-      }
-
-      if (pfds[cur].revents & (POLLERR | POLLHUP)) switch (cur) {
-
-        case 0:
-
-          FATAL("Packet capture interface is down.");
-
-        case 1:
-
-          FATAL("API socket is down.");
-
-        default:
-
-          /* Shut down API connection and free its state. */
-
-          DEBUG("[#] API connection on fd %d closed.\n", pfds[cur].fd);
-
-          close(pfds[cur].fd);
-          ctable[cur]->fd = -1;
- 
-          pfd_count = regen_pfds(pfds, ctable);
-          goto poll_again;
-
-      }
-
-      /* Processed all reported updates already? If so, bail out early. */
-
-      if (pfds[cur].revents && !--pret) break;
-
-    }
-
-  }
-
-  ck_free(ctable);
-  ck_free(pfds);
+#ifdef USE_EPOLL
+	epoll_event_loop();
+#else
+	poll_event_loop();
+#endif
 
 #else
 
@@ -973,7 +1481,9 @@ poll_again:
      in pcap_dispatch() or pcap_loop() unless there's I/O. */
 
   while (!stop_soon) {
-
+#ifndef USE_LIBPCAP
+#error Only LIBPCAP supported in Cygwin
+#endif
     s32 ret = pcap_dispatch(pt, -1, (pcap_handler)parse_packet, 0);
 
     if (ret < 0) return;
@@ -990,7 +1500,7 @@ poll_again:
 
 }
 
-
+#ifdef USE_LIBPCAP
 /* Simple event loop for processing offline captures. */
 
 static void offline_event_loop(void) {
@@ -1007,6 +1517,7 @@ static void offline_event_loop(void) {
   WARN("User-initiated shutdown.");
 
 }
+#endif
 
 
 /* Main entry point */
@@ -1022,13 +1533,13 @@ int main(int argc, char** argv) {
   if (getuid() != geteuid())
     FATAL("Please don't make me setuid. See README for more.\n");
 
-  while ((r = getopt(argc, argv, "+LS:df:i:m:o:pr:s:t:u:")) != -1) switch (r) {
-
+  while ((r = getopt(argc, argv, "+LS:df:i:m:o:pr:s:t:u:b")) != -1) switch (r) {
+#ifdef USE_PCAP
     case 'L':
 
       list_interfaces();
       exit(0);
-
+#endif
     case 'S':
 
 #ifdef __CYGWIN__
@@ -1042,13 +1553,15 @@ int main(int argc, char** argv) {
 
       api_max_conn = atol(optarg);
 
-      if (!api_max_conn || api_max_conn > 100)
-        FATAL("Outlandish value specified for -S.");
-
       break;
 
 #endif /* ^__CYGWIN__ */
 
+	case 'b':
+		if (disable_bpf)
+			FATAL("Multiple -b options not supported.");
+		disable_bpf = 1;
+		break;
 
     case 'd':
 
@@ -1099,7 +1612,7 @@ int main(int argc, char** argv) {
     case 'p':
     
       if (set_promisc)
-        FATAL("Even more promiscuous? People will call me slutty!");
+        FATAL("Even more promiscuous? People will start talking!");
 
       set_promisc = 1;
       break;
@@ -1156,9 +1669,10 @@ int main(int argc, char** argv) {
   }
 
   if (optind < argc) {
-
-    if (optind + 1 == argc) orig_rule = (u8*)argv[optind];
-    else FATAL("Filter rule must be a single parameter (use quotes).");
+	  if (!disable_bpf) {
+		  if (optind + 1 == argc) orig_rule = (u8*)argv[optind];
+		  else FATAL("Filter rule must be a single parameter (use quotes).");
+	  }
 
   }
 
@@ -1201,8 +1715,17 @@ int main(int argc, char** argv) {
 
   read_config(fp_file ? fp_file : (u8*)FP_FILE);
 
+#ifdef USE_LIBPCAP
   prepare_pcap();
-  prepare_bpf();
+  if (disable_bpf) {
+	  SAYF("[+] BPF Disabled\n");
+  }
+  else {
+	  prepare_bpf();
+  }
+#elif defined(USE_LIBMNL)
+  prepare_netlink();
+#endif
 
   if (log_file) open_log();
   if (api_sock) open_api();
@@ -1216,11 +1739,20 @@ int main(int argc, char** argv) {
 
   if (daemon_mode) fork_off();
 
+  signal(SIGPIPE, SIG_IGN);
   signal(SIGHUP, daemon_mode ? SIG_IGN : abort_handler);
   signal(SIGINT, abort_handler);
   signal(SIGTERM, abort_handler);
 
-  if (read_file) offline_event_loop(); else live_event_loop();
+#ifdef USE_LIBPCAP
+  if (read_file) 
+	  offline_event_loop(); 
+  else 
+	  live_event_loop();
+#elif defined(USE_LIBMNL)
+  live_event_loop();
+#endif
+
 
   if (!daemon_mode)
     SAYF("\nAll done. Processed %llu packets.\n", packet_cnt);

@@ -23,6 +23,16 @@
 #define ERRORF(x...)  fprintf(stderr, x)
 #define SAYF(x...)    printf(x)
 
+#define PWARN(x...) do { \
+    ERRORF("[!] SYSTEM WARNING: " x); \
+    ERRORF("\n        Location : %s(), %s:%u\n", \
+           __FUNCTION__, __FILE__, __LINE__); \
+    perror("      OS message "); \
+    ERRORF("\n"); \
+    exit(1); \
+   } while (0)
+
+
 #define WARN(x...) do { \
     ERRORF("[!] WARNING: " x); \
     ERRORF("\n"); \

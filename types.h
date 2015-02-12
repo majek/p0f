@@ -8,8 +8,8 @@
 
  */
 
-#ifndef _HAVE_TYPES_H
-#define _HAVE_TYPES_H
+#ifndef _HAVE_P0F_TYPES_H
+#define _HAVE_P0F_TYPES_H
 
 #include <stdint.h>
 
