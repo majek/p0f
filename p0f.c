@@ -1173,6 +1173,7 @@ static void epoll_event_loop(void){
 					if (ctable[fd].in_off == sizeof(struct p0f_api_query)) {
 						ev.events = EPOLLOUT | EPOLLERR | EPOLLHUP;
 						ev.data.fd = fd;
+						ctable[fd].in_off = 0;
 						res = epoll_ctl(epfd, EPOLL_CTL_MOD, fd, &ev);
 					}
 				}
@@ -1199,7 +1200,7 @@ static void epoll_event_loop(void){
 						/* All done? Back to square zero then! */
 
 						if (ctable[fd].out_off == sizeof(struct p0f_api_response)) {
-							ctable[fd].in_off = ctable[fd].out_off = 0;
+							ctable[fd].out_off = 0;
 
 							ev.events = EPOLLIN | EPOLLERR | EPOLLHUP;
 							ev.data.fd = fd;
